@@ -1,0 +1,215 @@
+### Add multiple-choice question (2 pts)
+# @no-cookie-jar
+POST {{host}}/api/question?quizId={{quizId}}
+Cookie: qd_session={{instructorToken}}
+Content-Type: application/json
+
+{
+  "type": "multiple_choice",
+  "prompt": "What is 2 + 2?",
+  "choices": [{ "key": "a", "text": "3" }, { "key": "b", "text": "4" }, { "key": "c", "text": "5" }],
+  "correctAnswer": "b",
+  "points": 2,
+  "explanation": "2 + 2 = 4"
+}
+
+> {%
+  client.test("201, order 1, quizId set", () => {
+    client.assert(response.status === 201, `got ${response.status}`);
+    const q = response.body.question ?? response.body;
+    client.assert(q.id && q.quizId === client.global.get("quizId") && q.order === 1, JSON.stringify(q));
+    client.global.set("qMcId", q.id);
+  });
+%}
+
+### Add true/false question (1 pt)
+# @no-cookie-jar
+POST {{host}}/api/question?quizId={{quizId}}
+Cookie: qd_session={{instructorToken}}
+Content-Type: application/json
+
+{ "type": "true_false", "prompt": "MongoDB is a relational database.", "correctAnswer": "false", "explanation": "It is a document database." }
+
+> {%
+  client.test("201, order auto-incremented, points default 1", () => {
+    client.assert(response.status === 201, `got ${response.status}`);
+    const q = response.body.question ?? response.body;
+    client.assert(q.order === 2 && q.points === 1, JSON.stringify(q));
+    client.global.set("qTfId", q.id);
+  });
+%}
+
+### Add short-answer question (1 pt)
+# @no-cookie-jar
+POST {{host}}/api/question?quizId={{quizId}}
+Cookie: qd_session={{instructorToken}}
+Content-Type: application/json
+
+{ "type": "short_answer", "prompt": "Capital of Australia?", "correctAnswer": "Canberra", "explanation": "Not Sydney." }
+
+> {%
+  client.test("201", () => {
+    client.assert(response.status === 201, `got ${response.status}`);
+    client.global.set("qSaId", (response.body.question ?? response.body).id);
+  });
+%}
+
+### Add throwaway question (deleted below)
+# @no-cookie-jar
+POST {{host}}/api/question?quizId={{quizId}}
+Cookie: qd_session={{instructorToken}}
+Content-Type: application/json
+
+{ "type": "short_answer", "prompt": "Delete me", "correctAnswer": "x" }
+
+> {%
+  client.test("201", () => {
+    client.assert(response.status === 201, `got ${response.status}`);
+    client.global.set("qTmpId", (response.body.question ?? response.body).id);
+  });
+%}
+
+### Add question as student -> 403
+# @no-cookie-jar
+POST {{host}}/api/question?quizId={{quizId}}
+Cookie: qd_session={{studentToken}}
+Content-Type: application/json
+
+{ "type": "short_answer", "prompt": "x", "correctAnswer": "x" }
+
+> {% client.test("403", () => client.assert(response.status === 403, `got ${response.status}`)); %}
+
+### Add MC with correctAnswer not in choices -> 400
+# @no-cookie-jar
+POST {{host}}/api/question?quizId={{quizId}}
+Cookie: qd_session={{instructorToken}}
+Content-Type: application/json
+
+{ "type": "multiple_choice", "prompt": "x", "choices": [{ "key": "a", "text": "1" }, { "key": "b", "text": "2" }], "correctAnswer": "z" }
+
+> {% client.test("400", () => client.assert(response.status === 400, `got ${response.status}`)); %}
+
+### Add question without prompt -> 400
+# @no-cookie-jar
+POST {{host}}/api/question?quizId={{quizId}}
+Cookie: qd_session={{instructorToken}}
+Content-Type: application/json
+
+{ "type": "short_answer", "correctAnswer": "x" }
+
+> {% client.test("400", () => client.assert(response.status === 400, `got ${response.status}`)); %}
+
+### Add question to missing quiz -> 404
+# @no-cookie-jar
+POST {{host}}/api/question?quizId={{missingId}}
+Cookie: qd_session={{instructorToken}}
+Content-Type: application/json
+
+{ "type": "short_answer", "prompt": "x", "correctAnswer": "x" }
+
+> {% client.test("404", () => client.assert(response.status === 404, `got ${response.status}`)); %}
+
+### List questions as owner -> sorted, answers visible
+# @no-cookie-jar
+GET {{host}}/api/question?quizId={{quizId}}
+Cookie: qd_session={{instructorToken}}
+
+> {%
+  client.test("200, 4 questions in order, owner sees correctAnswer", () => {
+    client.assert(response.status === 200, `got ${response.status}`);
+    const list = response.body.questions ?? response.body;
+    client.assert(list.length === 4, `got ${list.length}`);
+    client.assert(list.every((q, i) => i === 0 || list[i - 1].order <= q.order), "not sorted by order");
+    client.assert(list.every((q) => q.correctAnswer !== undefined), "owner should see answers");
+  });
+%}
+
+### List questions of a draft quiz as student -> 404
+# @no-cookie-jar
+GET {{host}}/api/question?quizId={{quizId}}
+Cookie: qd_session={{studentToken}}
+
+> {% client.test("404", () => client.assert(response.status === 404, `got ${response.status}`)); %}
+
+### Get one question as owner
+# @no-cookie-jar
+GET {{host}}/api/question/{{qMcId}}
+Cookie: qd_session={{instructorToken}}
+
+> {%
+  client.test("200 with correctAnswer", () => {
+    client.assert(response.status === 200, `got ${response.status}`);
+    const q = response.body.question ?? response.body;
+    client.assert(q.id === client.global.get("qMcId") && q.correctAnswer === "b", JSON.stringify(q));
+  });
+%}
+
+### Get question with malformed id -> 400
+# @no-cookie-jar
+GET {{host}}/api/question/nope
+Cookie: qd_session={{instructorToken}}
+
+> {% client.test("400", () => client.assert(response.status === 400, `got ${response.status}`)); %}
+
+### Update question prompt -> 200
+# @no-cookie-jar
+PUT {{host}}/api/question/{{qMcId}}
+Cookie: qd_session={{instructorToken}}
+Content-Type: application/json
+
+{ "prompt": "What is 2 + 2? (edited)" }
+
+> {%
+  client.test("200 and prompt changed, other fields kept", () => {
+    client.assert(response.status === 200, `got ${response.status}`);
+    const q = response.body.question ?? response.body;
+    client.assert(q.prompt.endsWith("(edited)") && q.correctAnswer === "b" && q.points === 2, JSON.stringify(q));
+  });
+%}
+
+### Update MC correctAnswer to a non-existent key -> 400
+# @no-cookie-jar
+PUT {{host}}/api/question/{{qMcId}}
+Cookie: qd_session={{instructorToken}}
+Content-Type: application/json
+
+{ "correctAnswer": "z" }
+
+> {% client.test("400", () => client.assert(response.status === 400, `got ${response.status}`)); %}
+
+### Update question as student -> 403
+# @no-cookie-jar
+PUT {{host}}/api/question/{{qMcId}}
+Cookie: qd_session={{studentToken}}
+Content-Type: application/json
+
+{ "correctAnswer": "a" }
+
+> {% client.test("403", () => client.assert(response.status === 403, `got ${response.status}`)); %}
+
+### Delete question as student -> 403
+# @no-cookie-jar
+DELETE {{host}}/api/question/{{qTmpId}}
+Cookie: qd_session={{studentToken}}
+
+> {% client.test("403", () => client.assert(response.status === 403, `got ${response.status}`)); %}
+
+### Delete question unauthenticated -> 401
+# @no-cookie-jar
+DELETE {{host}}/api/question/{{qTmpId}}
+
+> {% client.test("401", () => client.assert(response.status === 401, `got ${response.status}`)); %}
+
+### Delete question as owner
+# @no-cookie-jar
+DELETE {{host}}/api/question/{{qTmpId}}
+Cookie: qd_session={{instructorToken}}
+
+> {% client.test("200/204", () => client.assert([200, 204].includes(response.status), `got ${response.status}`)); %}
+
+### Deleted question is gone -> 404
+# @no-cookie-jar
+GET {{host}}/api/question/{{qTmpId}}
+Cookie: qd_session={{instructorToken}}
+
+> {% client.test("404", () => client.assert(response.status === 404, `got ${response.status}`)); %}

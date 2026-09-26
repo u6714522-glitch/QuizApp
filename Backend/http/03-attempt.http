@@ -1,0 +1,303 @@
+### Publish the quiz (has questions now)
+# @no-cookie-jar
+PUT {{host}}/api/quiz/{{quizId}}
+Cookie: qd_session={{instructorToken}}
+Content-Type: application/json
+
+{ "status": "published" }
+
+> {%
+  client.test("200 published", () => {
+    client.assert(response.status === 200, `got ${response.status}`);
+    client.assert((response.body.quiz ?? response.body).status === "published", "not published");
+  });
+%}
+
+### Student reads quiz for attempt -> no answers, no explanations
+# @no-cookie-jar
+GET {{host}}/api/quiz/{{quizId}}?for=attempt
+Cookie: qd_session={{studentToken}}
+
+> {%
+  client.test("200 and nothing leaked", () => {
+    client.assert(response.status === 200, `got ${response.status}`);
+    const qs = response.body.questions;
+    client.assert(qs.length === 3, `got ${qs.length}`);
+    client.assert(qs.every((q) => q.correctAnswer === undefined), "correctAnswer leaked");
+    client.assert(qs.every((q) => q.explanation === undefined), "explanation leaked before grading");
+  });
+%}
+
+
+
+
+
+
+### Student lists questions -> no answers
+# @no-cookie-jar
+GET {{host}}/api/question?quizId={{quizId}}
+Cookie: qd_session={{studentToken}}
+
+> {%
+  client.test("200 and no correctAnswer", () => {
+    client.assert(response.status === 200, `got ${response.status}`);
+    const list = response.body.questions ?? response.body;
+    client.assert(list.every((q) => q.correctAnswer === undefined), "correctAnswer leaked");
+  });
+%}
+
+### Student reads one question -> no answer
+# @no-cookie-jar
+GET {{host}}/api/question/{{qMcId}}
+Cookie: qd_session={{studentToken}}
+
+> {%
+  client.test("200 and no correctAnswer", () => {
+    client.assert(response.status === 200, `got ${response.status}`);
+    client.assert((response.body.question ?? response.body).correctAnswer === undefined, "correctAnswer leaked");
+  });
+%}
+
+### Start attempt as instructor -> 403
+# @no-cookie-jar
+POST {{host}}/api/attempt
+Cookie: qd_session={{instructorToken}}
+Content-Type: application/json
+
+{ "quizId": "{{quizId}}" }
+
+> {% client.test("403", () => client.assert(response.status === 403, `got ${response.status}`)); %}
+
+### Start attempt with malformed quizId -> 400
+# @no-cookie-jar
+POST {{host}}/api/attempt
+Cookie: qd_session={{studentToken}}
+Content-Type: application/json
+
+{ "quizId": "abc" }
+
+> {% client.test("400", () => client.assert(response.status === 400, `got ${response.status}`)); %}
+
+### Start attempt on missing quiz -> 404
+# @no-cookie-jar
+POST {{host}}/api/attempt
+Cookie: qd_session={{studentToken}}
+Content-Type: application/json
+
+{ "quizId": "{{missingId}}" }
+
+> {% client.test("404", () => client.assert(response.status === 404, `got ${response.status}`)); %}
+
+### Start attempt as student -> 201
+# @no-cookie-jar
+POST {{host}}/api/attempt
+Cookie: qd_session={{studentToken}}
+Content-Type: application/json
+
+{ "quizId": "{{quizId}}" }
+
+> {%
+  client.test("201 in_progress, maxScore 4", () => {
+    client.assert(response.status === 201, `got ${response.status}`);
+    const a = response.body.attempt ?? response.body;
+    client.assert(a.status === "in_progress" && a.maxScore === 4 && a.score == null, JSON.stringify(a));
+    client.assert(a.studentId === client.global.get("studentId"), "studentId is not the caller");
+    client.global.set("attemptId", a.id);
+  });
+%}
+
+### Start a second attempt while one is in progress -> 409
+# @no-cookie-jar
+POST {{host}}/api/attempt
+Cookie: qd_session={{studentToken}}
+Content-Type: application/json
+
+{ "quizId": "{{quizId}}" }
+
+> {% client.test("409", () => client.assert(response.status === 409, `got ${response.status}`)); %}
+
+### Save answers -> 200, still in progress, not graded
+# @no-cookie-jar
+PUT {{host}}/api/attempt/{{attemptId}}
+Cookie: qd_session={{studentToken}}
+Content-Type: application/json
+
+{
+  "action": "save",
+  "answers": [
+    { "questionId": "{{qMcId}}", "given": "b" },
+    { "questionId": "{{qTfId}}", "given": "true" }
+  ]
+}
+
+> {%
+  client.test("200, in_progress, no grading leaked", () => {
+    client.assert(response.status === 200, `got ${response.status}`);
+    const a = response.body.attempt ?? response.body;
+    client.assert(a.status === "in_progress", a.status);
+    client.assert(a.answers.length === 2 && a.answers.every((x) => x.given !== undefined), "answers not stored as `given`");
+    client.assert(a.answers.every((x) => x.isCorrect == null), "isCorrect leaked before submit");
+  });
+%}
+
+### Save answer for a question not in this quiz -> 400
+# @no-cookie-jar
+PUT {{host}}/api/attempt/{{attemptId}}
+Cookie: qd_session={{studentToken}}
+Content-Type: application/json
+
+{ "action": "save", "answers": [{ "questionId": "{{missingId}}", "given": "a" }] }
+
+> {% client.test("400", () => client.assert(response.status === 400, `got ${response.status}`)); %}
+
+### Invalid action -> 400
+# @no-cookie-jar
+PUT {{host}}/api/attempt/{{attemptId}}
+Cookie: qd_session={{studentToken}}
+Content-Type: application/json
+
+{ "action": "grade" }
+
+> {% client.test("400", () => client.assert(response.status === 400, `got ${response.status}`)); %}
+
+### Quiz owner cannot modify the student's attempt -> 403
+# @no-cookie-jar
+PUT {{host}}/api/attempt/{{attemptId}}
+Cookie: qd_session={{instructorToken}}
+Content-Type: application/json
+
+{ "action": "submit" }
+
+> {% client.test("403", () => client.assert(response.status === 403, `got ${response.status}`)); %}
+
+### Quiz owner can read the attempt
+# @no-cookie-jar
+GET {{host}}/api/attempt/{{attemptId}}
+Cookie: qd_session={{instructorToken}}
+
+> {% client.test("200", () => client.assert(response.status === 200, `got ${response.status}`)); %}
+
+### Submit (adds short answer, messy casing) -> graded 3/4
+# @no-cookie-jar
+PUT {{host}}/api/attempt/{{attemptId}}
+Cookie: qd_session={{studentToken}}
+Content-Type: application/json
+
+{ "action": "submit", "answers": [{ "questionId": "{{qSaId}}", "given": "  canberra " }] }
+
+> {%
+  client.test("200, graded, score 3 of 4", () => {
+    client.assert(response.status === 200, `got ${response.status}`);
+    const a = response.body.attempt ?? response.body;
+    client.assert(a.status === "graded", a.status);
+    client.assert(a.score === 3 && a.maxScore === 4, `score ${a.score}/${a.maxScore}`);
+    client.assert(a.submittedAt, "submittedAt missing");
+    const byQ = Object.fromEntries(a.answers.map((x) => [x.questionId, x]));
+    client.assert(byQ[client.global.get("qMcId")].pointsAwarded === 2, "MC should earn 2");
+    client.assert(byQ[client.global.get("qTfId")].isCorrect === false, "TF should be wrong");
+    client.assert(byQ[client.global.get("qSaId")].isCorrect === true, "SA should be right (trim + case-insensitive)");
+  });
+%}
+
+### Result view shows explanations after grading
+# @no-cookie-jar
+GET {{host}}/api/attempt/{{attemptId}}
+Cookie: qd_session={{studentToken}}
+
+> {%
+  client.test("200 with questions + explanations", () => {
+    client.assert(response.status === 200, `got ${response.status}`);
+    const qs = response.body.questions ?? [];
+    client.assert(qs.length === 3 && qs.every((q) => q.explanation !== undefined), "explanations missing");
+  });
+%}
+
+### Save after submit -> 409
+# @no-cookie-jar
+PUT {{host}}/api/attempt/{{attemptId}}
+Cookie: qd_session={{studentToken}}
+Content-Type: application/json
+
+{ "action": "save", "answers": [] }
+
+> {% client.test("409", () => client.assert(response.status === 409, `got ${response.status}`)); %}
+
+### Student lists own attempts
+# @no-cookie-jar
+GET {{host}}/api/attempt
+Cookie: qd_session={{studentToken}}
+
+> {%
+  client.test("200, contains attempt, only own", () => {
+    client.assert(response.status === 200, `got ${response.status}`);
+    const b = response.body;
+    const list = Array.isArray(b) ? b : (b.attempts ?? b.items ?? b.data ?? []);
+    client.assert(list.some((a) => a.id === client.global.get("attemptId")), "attempt missing");
+    client.assert(list.every((a) => a.studentId === client.global.get("studentId")), "other students' attempts leaked");
+  });
+%}
+
+### Instructor lists attempts on own quiz (results page)
+# @no-cookie-jar
+GET {{host}}/api/attempt?quizId={{quizId}}
+Cookie: qd_session={{instructorToken}}
+
+> {%
+  client.test("200, contains attempt with student name", () => {
+    client.assert(response.status === 200, `got ${response.status}`);
+    const b = response.body;
+    const list = Array.isArray(b) ? b : (b.attempts ?? b.items ?? b.data ?? []);
+    const a = list.find((x) => x.id === client.global.get("attemptId"));
+    client.assert(a && a.student?.name, "attempt or student.name missing");
+  });
+%}
+
+### Instructor lists attempts on a missing quiz -> 404
+# @no-cookie-jar
+GET {{host}}/api/attempt?quizId={{missingId}}
+Cookie: qd_session={{instructorToken}}
+
+> {% client.test("404", () => client.assert(response.status === 404, `got ${response.status}`)); %}
+
+### Student cannot delete a graded attempt -> 403
+# @no-cookie-jar
+DELETE {{host}}/api/attempt/{{attemptId}}
+Cookie: qd_session={{studentToken}}
+
+> {% client.test("403", () => client.assert(response.status === 403, `got ${response.status}`)); %}
+
+### Start a second attempt (first is graded now)
+# @no-cookie-jar
+POST {{host}}/api/attempt
+Cookie: qd_session={{studentToken}}
+Content-Type: application/json
+
+{ "quizId": "{{quizId}}" }
+
+> {%
+  client.test("201", () => {
+    client.assert(response.status === 201, `got ${response.status}`);
+    client.global.set("attempt2Id", (response.body.attempt ?? response.body).id);
+  });
+%}
+
+### Student discards in-progress attempt
+# @no-cookie-jar
+DELETE {{host}}/api/attempt/{{attempt2Id}}
+Cookie: qd_session={{studentToken}}
+
+> {% client.test("200/204", () => client.assert([200, 204].includes(response.status), `got ${response.status}`)); %}
+
+### Discarded attempt is gone -> 404
+# @no-cookie-jar
+GET {{host}}/api/attempt/{{attempt2Id}}
+Cookie: qd_session={{studentToken}}
+
+> {% client.test("404", () => client.assert(response.status === 404, `got ${response.status}`)); %}
+
+### Quiz owner deletes the graded attempt
+# @no-cookie-jar
+DELETE {{host}}/api/attempt/{{attemptId}}
+Cookie: qd_session={{instructorToken}}
+
+> {% client.test("200/204", () => client.assert([200, 204].includes(response.status), `got ${response.status}`)); %}

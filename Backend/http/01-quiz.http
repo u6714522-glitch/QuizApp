@@ -1,0 +1,216 @@
+### Create quiz unauthenticated -> 401
+# @no-cookie-jar
+POST {{host}}/api/quiz
+Content-Type: application/json
+
+{ "title": "x", "subject": "CSX4107" }
+
+> {% client.test("401", () => client.assert(response.status === 401, `got ${response.status}`)); %}
+
+### Create quiz as student -> 403
+# @no-cookie-jar
+POST {{host}}/api/quiz
+Cookie: qd_session={{studentToken}}
+Content-Type: application/json
+
+{ "title": "Student quiz", "subject": "CSX4107", "timeLimitMinutes": 10, "passingScore": 50 }
+
+> {%
+  client.test("403 with error envelope", () => {
+    client.assert(response.status === 403, `got ${response.status}`);
+    client.assert(response.body.error?.code, "missing error.code");
+  });
+%}
+
+### Create quiz without title -> 400
+# @no-cookie-jar
+POST {{host}}/api/quiz
+Cookie: qd_session={{instructorToken}}
+Content-Type: application/json
+
+{ "subject": "CSX4107", "timeLimitMinutes": 10, "passingScore": 50 }
+
+> {% client.test("400", () => client.assert(response.status === 400, `got ${response.status}`)); %}
+
+### Create quiz (valid) -> 201, draft, owned by caller
+# @no-cookie-jar
+POST {{host}}/api/quiz
+Cookie: qd_session={{instructorToken}}
+Content-Type: application/json
+
+{
+  "title": "HTTP Test Quiz",
+  "description": "Created by the WebStorm HTTP tests",
+  "subject": "CSX4107",
+  "timeLimitMinutes": 10,
+  "opensAt": "2020-01-01T00:00:00.000Z",
+  "closesAt": "2030-01-01T00:00:00.000Z",
+  "passingScore": 50
+}
+
+> {%
+  client.test("201, draft, ownerId, proposal field names", () => {
+    client.assert(response.status === 201, `got ${response.status}`);
+    const q = response.body.quiz ?? response.body;
+    client.assert(q.id, "missing id");
+    client.assert(q.status === "draft", `status ${q.status}`);
+    client.assert(q.ownerId === client.global.get("instructorId"), "ownerId is not the caller");
+    client.assert(q.timeLimitMinutes === 10 && q.opensAt && q.closesAt, "field names differ from proposal §4.2");
+    client.global.set("quizId", q.id);
+  });
+%}
+
+### Create untimed quiz (timeLimitMinutes 0) -> 201
+# @no-cookie-jar
+POST {{host}}/api/quiz
+Cookie: qd_session={{instructorToken}}
+Content-Type: application/json
+
+{ "title": "Untimed quiz", "subject": "CSX4107", "timeLimitMinutes": 0, "passingScore": 50 }
+
+> {%
+  client.test("201 — 0 means untimed per proposal", () => {
+    client.assert(response.status === 201, `got ${response.status}`);
+    client.global.set("untimedQuizId", (response.body.quiz ?? response.body).id);
+  });
+%}
+
+### Delete the untimed quiz
+# @no-cookie-jar
+DELETE {{host}}/api/quiz/{{untimedQuizId}}
+Cookie: qd_session={{instructorToken}}
+
+> {% client.test("200/204", () => client.assert([200, 204].includes(response.status), `got ${response.status}`)); %}
+
+### List quiz as instructor, filtered + paginated
+# @no-cookie-jar
+GET {{host}}/api/quiz?subject=CSX4107&page=1&limit=10
+Cookie: qd_session={{instructorToken}}
+
+> {%
+  client.test("200 and contains the new quiz", () => {
+    client.assert(response.status === 200, `got ${response.status}`);
+    const b = response.body;
+    const list = Array.isArray(b) ? b : (b.quiz ?? b.items ?? b.data ?? []);
+    client.assert(list.some((q) => q.id === client.global.get("quizId")), "quiz not in list");
+    client.assert(list.every((q) => q.subject === "CSX4107"), "subject filter ignored");
+  });
+%}
+
+### List by status=draft
+# @no-cookie-jar
+GET {{host}}/api/quiz?status=draft
+Cookie: qd_session={{instructorToken}}
+
+> {%
+  client.test("only drafts", () => {
+    const b = response.body;
+    const list = Array.isArray(b) ? b : (b.quiz ?? b.items ?? b.data ?? []);
+    client.assert(response.status === 200 && list.every((q) => q.status === "draft"), "status filter ignored");
+  });
+%}
+
+### List as student hides drafts
+# @no-cookie-jar
+GET {{host}}/api/quiz
+Cookie: qd_session={{studentToken}}
+
+> {%
+  client.test("draft quiz not visible to student", () => {
+    client.assert(response.status === 200, `got ${response.status}`);
+    const b = response.body;
+    const list = Array.isArray(b) ? b : (b.quiz ?? b.items ?? b.data ?? []);
+    client.assert(!list.some((q) => q.id === client.global.get("quizId")), "draft leaked");
+    client.assert(list.every((q) => q.status === "published"), "non-published quiz in student list");
+  });
+%}
+
+### Get quiz as owner
+# @no-cookie-jar
+GET {{host}}/api/quiz/{{quizId}}
+Cookie: qd_session={{instructorToken}}
+
+> {%
+  client.test("200 with quiz + questions", () => {
+    client.assert(response.status === 200, `got ${response.status}`);
+    client.assert(response.body.quiz?.id === client.global.get("quizId"), "wrong quiz");
+    client.assert(Array.isArray(response.body.questions), "questions missing");
+  });
+%}
+
+### Get draft quiz as student -> 404
+# @no-cookie-jar
+GET {{host}}/api/quiz/{{quizId}}
+Cookie: qd_session={{studentToken}}
+
+> {% client.test("404", () => client.assert(response.status === 404, `got ${response.status}`)); %}
+
+### Get quiz with malformed id -> 400
+# @no-cookie-jar
+GET {{host}}/api/quiz/not-an-id
+Cookie: qd_session={{instructorToken}}
+
+> {% client.test("400", () => client.assert(response.status === 400, `got ${response.status}`)); %}
+
+### Get quiz that doesn't exist -> 404
+# @no-cookie-jar
+GET {{host}}/api/quiz/{{missingId}}
+Cookie: qd_session={{instructorToken}}
+
+> {% client.test("404", () => client.assert(response.status === 404, `got ${response.status}`)); %}
+
+### Update title as owner -> 200
+# @no-cookie-jar
+PUT {{host}}/api/quiz/{{quizId}}
+Cookie: qd_session={{instructorToken}}
+Content-Type: application/json
+
+{ "title": "HTTP Test Quiz (edited)", "passingScore": 60 }
+
+> {%
+  client.test("200 and title changed", () => {
+    client.assert(response.status === 200, `got ${response.status}`);
+    const q = response.body.quiz ?? response.body;
+    client.assert(q.title === "HTTP Test Quiz (edited)" && q.passingScore === 60, "not updated");
+  });
+%}
+
+### Update as student -> 403
+# @no-cookie-jar
+PUT {{host}}/api/quiz/{{quizId}}
+Cookie: qd_session={{studentToken}}
+Content-Type: application/json
+
+{ "title": "hijacked" }
+
+> {% client.test("403", () => client.assert(response.status === 403, `got ${response.status}`)); %}
+
+### Update ownerId is rejected -> 400
+# @no-cookie-jar
+PUT {{host}}/api/quiz/{{quizId}}
+Cookie: qd_session={{instructorToken}}
+Content-Type: application/json
+
+{ "ownerId": "{{studentId}}" }
+
+> {% client.test("400 — ownerId not editable", () => client.assert(response.status === 400, `got ${response.status}`)); %}
+
+### Update with invalid status -> 400
+# @no-cookie-jar
+PUT {{host}}/api/quiz/{{quizId}}
+Cookie: qd_session={{instructorToken}}
+Content-Type: application/json
+
+{ "status": "archived" }
+
+> {% client.test("400", () => client.assert(response.status === 400, `got ${response.status}`)); %}
+
+### Publish with zero questions -> 409
+# @no-cookie-jar
+PUT {{host}}/api/quiz/{{quizId}}
+Cookie: qd_session={{instructorToken}}
+Content-Type: application/json
+
+{ "status": "published" }
+
+> {% client.test("409", () => client.assert(response.status === 409, `got ${response.status}`)); %}

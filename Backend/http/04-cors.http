@@ -1,0 +1,92 @@
+### Simple GET carries CORS headers (even on 401)
+# @no-cookie-jar
+GET {{host}}/api/me
+Origin: {{frontendOrigin}}
+
+> {%
+  client.test("Allow-Origin echoes the frontend, credentials allowed", () => {
+    const origin = response.headers.valueOf("Access-Control-Allow-Origin");
+    const creds = response.headers.valueOf("Access-Control-Allow-Credentials");
+    client.assert(origin === request.environment.get("frontendOrigin"), `Allow-Origin was ${origin}`);
+    client.assert(creds === "true", `Allow-Credentials was ${creds}`);
+  });
+  client.test("never '*' when credentials are allowed", () => {
+    client.assert(response.headers.valueOf("Access-Control-Allow-Origin") !== "*", "browsers reject * with credentials");
+  });
+%}
+
+### Preflight: login (POST + JSON)
+# @no-cookie-jar
+OPTIONS {{host}}/api/authentication/login
+Origin: {{frontendOrigin}}
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: content-type
+
+> {%
+  client.test("preflight OK for POST + Content-Type", () => {
+    client.assert([200, 204].includes(response.status), `got ${response.status}`);
+    const origin = response.headers.valueOf("Access-Control-Allow-Origin");
+    const methods = response.headers.valueOf("Access-Control-Allow-Methods") ?? "";
+    const headers = (response.headers.valueOf("Access-Control-Allow-Headers") ?? "").toLowerCase();
+    client.assert(origin === request.environment.get("frontendOrigin"), `Allow-Origin was ${origin}`);
+    client.assert(methods.includes("POST"), `Allow-Methods: ${methods}`);
+    client.assert(headers.includes("content-type"), `Allow-Headers: ${headers}`);
+  });
+%}
+
+### Preflight: update quiz (PUT)
+# @no-cookie-jar
+OPTIONS {{host}}/api/quiz/{{missingId}}
+Origin: {{frontendOrigin}}
+Access-Control-Request-Method: PUT
+Access-Control-Request-Headers: content-type
+
+> {%
+  client.test("PUT allowed", () => {
+    client.assert([200, 204].includes(response.status), `got ${response.status}`);
+    const methods = response.headers.valueOf("Access-Control-Allow-Methods") ?? "";
+    client.assert(methods.includes("PUT"), `Allow-Methods: ${methods}`);
+  });
+%}
+
+### Preflight: delete quiz (DELETE)
+# @no-cookie-jar
+OPTIONS {{host}}/api/quiz/{{missingId}}
+Origin: {{frontendOrigin}}
+Access-Control-Request-Method: DELETE
+
+> {%
+  client.test("DELETE allowed", () => {
+    client.assert([200, 204].includes(response.status), `got ${response.status}`);
+    const methods = response.headers.valueOf("Access-Control-Allow-Methods") ?? "";
+    client.assert(methods.includes("DELETE"), `Allow-Methods: ${methods}`);
+  });
+%}
+
+### Preflight: update user (PATCH)
+# @no-cookie-jar
+OPTIONS {{host}}/api/user/{{missingId}}
+Origin: {{frontendOrigin}}
+Access-Control-Request-Method: PATCH
+Access-Control-Request-Headers: content-type
+
+> {%
+  client.test("PATCH allowed", () => {
+    client.assert([200, 204].includes(response.status), `got ${response.status}`);
+    const methods = response.headers.valueOf("Access-Control-Allow-Methods") ?? "";
+    client.assert(methods.includes("PATCH"), `Allow-Methods: ${methods}`);
+  });
+%}
+
+### Unknown origin is not allowed
+# @no-cookie-jar
+GET {{host}}/api/me
+Origin: http://evil.example
+
+> {%
+  client.test("Allow-Origin does not echo a foreign origin", () => {
+    const origin = response.headers.valueOf("Access-Control-Allow-Origin");
+    client.assert(origin !== "http://evil.example" && origin !== "*", `Allow-Origin was ${origin}`);
+  });
+%}
+

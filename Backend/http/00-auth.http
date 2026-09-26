@@ -1,0 +1,219 @@
+### Register instructor (then promote by hand — see note below)
+# @no-cookie-jar
+POST {{host}}/api/authentication/register
+Content-Type: application/json
+
+{ "name": "Test Instructor", "email": "{{instructorEmail}}", "password": "{{password}}" }
+
+> {%
+  client.test("201 new or 409 already registered", () => {
+    client.assert([201, 409].includes(response.status), `got ${response.status}`);
+  });
+  if (response.status === 201) client.test("no password in response", () => {
+    client.assert(!JSON.stringify(response.body).includes("password"), "leaks password/passwordHash");
+  });
+%}
+
+
+### Register student
+# One-time promote (register never accepts a role):
+# mongosh quizdeck --eval 'db.users.updateOne({email:"instructor@quizdeck.test"},{$set:{role:"instructor"},$inc:{tokenVersion:1}})'
+# @no-cookie-jar
+POST {{host}}/api/authentication/register
+Content-Type: application/json
+
+{ "name": "Test Student", "email": "{{studentEmail}}", "password": "{{password}}" }
+
+> {%
+  client.test("201 new or 409 already registered", () => {
+    client.assert([201, 409].includes(response.status), `got ${response.status}`);
+  });
+%}
+
+### Register ignores a client-supplied role
+# @no-cookie-jar
+POST {{host}}/api/authentication/register
+Content-Type: application/json
+
+{ "name": "Sneaky", "email": "sneaky-{{$uuid}}@quizdeck.test", "password": "{{password}}", "role": "instructor" }
+
+> {%
+  client.test("201 and role forced to student (or role rejected with 400)", () => {
+    if (response.status === 400) return;
+    client.assert(response.status === 201, `got ${response.status}`);
+    const u = response.body.user ?? response.body;
+    client.assert(u.role === "student", `role was ${u.role}`);
+  });
+%}
+
+### Register duplicate email -> 409
+# @no-cookie-jar
+POST {{host}}/api/authentication/register
+Content-Type: application/json
+
+{ "name": "Dup", "email": "{{studentEmail}}", "password": "{{password}}" }
+
+> {%
+  client.test("409 EMAIL_TAKEN", () => {
+    client.assert(response.status === 409, `got ${response.status} — is the unique index on users.email created?`);
+    client.assert(response.body.error?.code, "missing error.code");
+  });
+%}
+
+### Register missing name -> 400
+# @no-cookie-jar
+POST {{host}}/api/authentication/register
+Content-Type: application/json
+
+{ "email": "noname-{{$uuid}}@quizdeck.test", "password": "{{password}}" }
+
+> {%
+  client.test("400 with error envelope", () => {
+    client.assert(response.status === 400, `got ${response.status}`);
+    client.assert(response.body.error?.code && response.body.error?.message, "missing error.code/message");
+  });
+%}
+
+### Register short password -> 400
+# @no-cookie-jar
+POST {{host}}/api/authentication/register
+Content-Type: application/json
+
+{ "name": "Short", "email": "short-{{$uuid}}@quizdeck.test", "password": "abc" }
+
+> {% client.test("400", () => client.assert(response.status === 400, `got ${response.status}`)); %}
+
+### Register malformed JSON -> 400 (not 500)
+# @no-cookie-jar
+POST {{host}}/api/authentication/register
+Content-Type: application/json
+
+{ "name": "broken",
+
+> {% client.test("400", () => client.assert(response.status === 400, `got ${response.status}`)); %}
+
+### Login wrong password -> 401
+# @no-cookie-jar
+POST {{host}}/api/authentication/login
+Content-Type: application/json
+
+{ "email": "{{studentEmail}}", "password": "WrongPassword123" }
+
+> {%
+  client.test("401", () => client.assert(response.status === 401, `got ${response.status}`));
+  client.global.set("wrongPwMsg", response.body.error?.message ?? "");
+%}
+
+### Login unknown email -> 401 with the SAME message (no user enumeration)
+# @no-cookie-jar
+POST {{host}}/api/authentication/login
+Content-Type: application/json
+
+{ "email": "nobody-{{$uuid}}@quizdeck.test", "password": "{{password}}" }
+
+> {%
+  client.test("401, same message as wrong password", () => {
+    client.assert(response.status === 401, `got ${response.status}`);
+    client.assert(response.body.error?.message === client.global.get("wrongPwMsg"), "messages differ");
+  });
+%}
+
+### Login instructor
+# @no-cookie-jar
+POST {{host}}/api/authentication/login
+Content-Type: application/json
+
+{ "email": "{{instructorEmail}}", "password": "{{password}}" }
+
+> {%
+  client.test("200, httpOnly cookie, role instructor", () => {
+    client.assert(response.status === 200, `got ${response.status}`);
+    const sc = response.headers.valueOf("Set-Cookie") ?? "";
+    client.assert(/qd_session=/.test(sc) && /HttpOnly/i.test(sc), `bad Set-Cookie: ${sc}`);
+    const u = response.body.user ?? response.body;
+    client.assert(u.role === "instructor", "not promoted — run the mongosh command in this file");
+    client.assert(!JSON.stringify(response.body).includes("password"), "leaks password hash");
+    client.global.set("instructorToken", /qd_session=([^;]+)/.exec(sc)[1]);
+  });
+%}
+
+### Login student
+# @no-cookie-jar
+POST {{host}}/api/authentication/login
+Content-Type: application/json
+
+{ "email": "{{studentEmail}}", "password": "{{password}}" }
+
+> {%
+  client.test("200 and cookie", () => {
+    client.assert(response.status === 200, `got ${response.status}`);
+    const sc = response.headers.valueOf("Set-Cookie") ?? "";
+    client.global.set("studentToken", /qd_session=([^;]+)/.exec(sc)[1]);
+  });
+%}
+
+### Me without cookie -> 401
+# @no-cookie-jar
+GET {{host}}/api/me
+
+> {%
+  client.test("401 with error envelope", () => {
+    client.assert(response.status === 401, `got ${response.status}`);
+    client.assert(response.body.error?.code, "missing error.code");
+  });
+%}
+
+### Me with garbage cookie -> 401
+# @no-cookie-jar
+GET {{host}}/api/me
+Cookie: qd_session=not.a.jwt
+
+> {% client.test("401", () => client.assert(response.status === 401, `got ${response.status}`)); %}
+
+### Me as instructor
+# @no-cookie-jar
+GET {{host}}/api/me
+Cookie: qd_session={{instructorToken}}
+
+> {%
+  client.test("200, instructor", () => {
+    client.assert(response.status === 200, `got ${response.status}`);
+    const u = response.body.user ?? response.body;
+    client.assert(u.role === "instructor", `role ${u.role}`);
+    client.assert(!JSON.stringify(response.body).includes("password"), "leaks password hash");
+    client.global.set("instructorId", u.id);
+  });
+%}
+
+### Me as student
+# @no-cookie-jar
+GET {{host}}/api/me
+Cookie: qd_session={{studentToken}}
+
+> {%
+  client.test("200, student", () => {
+    client.assert(response.status === 200, `got ${response.status}`);
+    const u = response.body.user ?? response.body;
+    client.assert(u.role === "student", `role ${u.role}`);
+    client.global.set("studentId", u.id);
+  });
+%}
+
+### Logout clears the cookie
+# @no-cookie-jar
+POST {{host}}/api/authentication/logout
+Cookie: qd_session={{studentToken}}
+
+> {%
+  client.test("200 and cookie expired", () => {
+    client.assert(response.status === 200, `got ${response.status}`);
+    const sc = response.headers.valueOf("Set-Cookie") ?? "";
+    client.assert(/qd_session=/.test(sc) && /(Max-Age=0|Expires=Thu, 01 Jan 1970)/i.test(sc), `not cleared: ${sc}`);
+  });
+%}
+
+### Logout without a session still works
+# @no-cookie-jar
+POST {{host}}/api/authentication/logout
+
+> {% client.test("200", () => client.assert(response.status === 200, `got ${response.status}`)); %}
