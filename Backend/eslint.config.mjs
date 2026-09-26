@@ -76,15 +76,7 @@ const eslintConfig = defineConfig([
         {
           blankLine: "any",
           prev: ["singleline-const", "singleline-let"],
-          next: [
-            "singleline-const",
-            "singleline-let",
-            "if",
-            "for",
-            "while",
-            "switch",
-            "try",
-          ],
+          next: ["singleline-const", "singleline-let", "if", "for", "while", "switch", "try"],
         },
 
         // Guard clauses stack with each other.
@@ -155,10 +147,6 @@ const eslintConfig = defineConfig([
     },
   },
 
-  // Prettier compat (must be last of the shared configs).
-  // Turns off every ESLint rule that overlaps with Prettier's formatting.
-  eslintConfigPrettier,
-
   // Deliberately re-enabled AFTER eslint-config-prettier.
   // It classes this as a "special rule" and disables it, but it catches real
   // ASI bugs (`const a = b\n[1, 2].forEach(...)`). Safe as long as ESLint
@@ -169,6 +157,10 @@ const eslintConfig = defineConfig([
       "no-unexpected-multiline": "error",
     },
   },
+
+  // Prettier compat (must be last of the shared configs).
+  // Turns off every ESLint rule that overlaps with Prettier's formatting.
+  eslintConfigPrettier,
 ]);
 
 export default eslintConfig;
