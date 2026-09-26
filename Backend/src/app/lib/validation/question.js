@@ -31,7 +31,9 @@ export const questionSchema = z.discriminatedUnion("type",[
   z.object({
     ...common,
     type: z.literal("true_false"),
-    correctAnswer: z.boolean({ message: "correctAnswer must be true or false" }),
+    correctAnswer: z.union([z.boolean(), z.enum(["true", "false"])],{
+      message: "correctAnswer must be true or false",
+    }).transform((v) => String(v)),
   }),
   z.object({
     ...common,

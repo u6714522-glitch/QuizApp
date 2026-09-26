@@ -10,7 +10,7 @@ export function getClientPromise() {
     throw new Error("Please add your MongoDB URI to .env.local");
   }
 
-  if (process.env.NODE_ENV === "developement") {
+  if (process.env.NODE_ENV === "development") {
     if (!globalClientPromise) {
       const client = new MongoClient(uri, options);
 

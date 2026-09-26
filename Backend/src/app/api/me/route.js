@@ -3,8 +3,12 @@ import { requireAuth } from "@/app/lib/authentication/session";
 
 export async function GET() {
   const { session, response } = await requireAuth();
-
   if (response) return response;
 
-  return successResponse({ session, response }, 200);
+  const { user } = session;
+
+  return successResponse(
+    { user: { id: session.userId, name: user.name, email: session.email, role: session.role } },
+    200,
+  );
 }

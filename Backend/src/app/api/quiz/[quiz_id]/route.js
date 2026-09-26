@@ -1,97 +1,91 @@
-import { ObjectId } from "mongodb";
 import { getClientPromise } from "@/app/lib/mongodb";
 import { requireAuth, requireRole } from "@/app/lib/authentication/session";
+import { parseObjectId } from "@/app/lib/params";
 import { serializeQuiz, serializeQuestion } from "@/app/lib/api";
 import { errorResponse, successResponse, printExceptionLog } from "@/app/lib/utils";
 import { quizUpdateSchema } from "@/app/lib/validation/quiz";
+import corsHeaders from "@/app/lib/cors";
 
 export async function GET(request, { params }) {
   try {
-    const client = await getClientPromise();
-    const { session, response } = await requireAuth(request);
-
+    const { session, response } = await requireAuth();
     if (response) return response;
 
-    const { id } = await params;
+    const quizId = await parseObjectId(params, "quiz_id");
+    if (!quizId) return errorResponse("Invalid quiz id", 400);
 
-    if (!ObjectId.isValid(id)) return errorResponse("Invalid Quiz ID", 400);
+    const client = await getClientPromise();
+    const db = client.db(process.env.DB_NAME)
 
-    const quizId = new ObjectId(id);
-
-    const db = client.db(process.env.DB_NAME);
     const quiz = await db.collection("quizzes").findOne({ _id: quizId });
+    const isOwner = quiz && quiz.ownerId.toString() === session.userId;
 
-    const isOwner = quiz?.ownerId.toString() === session.user.id;
-
-    if (!quiz || (quiz.status !== "published" && !isOwner)) {
+    // Non-owners only see published quizzes; say 404 so drafts aren't revealed.
+    if (!quiz || (!isOwner && quiz.status !== "published")) {
       return errorResponse("Quiz not found", 404);
     }
 
-    const hideAnswers =
-      !isOwner || request.nextUrl.search.nextUrl.searchParmas.get("for") === "attempt";
+    const hideAnswers = !isOwner || request.nextUrl.searchParams.get("for") === "attempt";
 
     const questions = await db
       .collection("questions")
-      .find({ quizId }, hideAnswers ? { projection: { correctAnswer: 0 } } : {})
+      .find({ quizId }, hideAnswers ? { projection: { correctAnswer: 0, explanation: 0 } } : {})
       .sort({ order: 1 })
       .toArray();
 
     return successResponse(
-      {
-        quiz: serializeQuiz(quiz),
-        questions: questions.map(serializeQuestion),
-      },
+      { quiz: serializeQuiz(quiz), questions: questions.map(serializeQuestion) },
       200,
     );
-  } catch (error) {
-    printExceptionLog("GET /api/quizzes/[id]", error);
+  } catch (err) {
+    printExceptionLog("GET /api/quiz/[quiz_id]", err);
 
-    return errorResponse("Internal server error", 500);
+    return errorResponse("Internal Server Error", 500);
   }
 }
 
 export async function PUT(request, { params }) {
   try {
-    const client = await getClientPromise();
     const { session, response } = await requireRole("instructor");
-
     if (response) return response;
 
-    const { id } = await params;
-
-    if (!ObjectId.isValid(id)) return errorResponse("Invalid Quiz ID", 400);
-
-    const quizId = new ObjectId(id);
+    const quizId = await parseObjectId(params, "quiz_id");
+    if (!quizId) return errorResponse("Invalid quiz id", 400);
 
     let body;
 
     try {
       body = await request.json();
     } catch {
-      return errorResponse("Malformed JSON body", 400);
+      return errorResponse("Invalid JSON", 400);
     }
 
     const parsed = quizUpdateSchema.safeParse(body);
-
-    if (!parsed.success) return errorResponse("Invalid quiz update", 400);
+    if (!parsed.success) return errorResponse(parsed.error.issues[0].message, 400);
     const data = parsed.data;
 
+    const client = await getClientPromise();
     const db = client.db(process.env.DB_NAME);
-    const quizzes = db.collection("quizzes");
+    const quizzes = await db.collection("quizzes");
     const quiz = await quizzes.findOne({ _id: quizId });
 
     if (!quiz) return errorResponse("Quiz not found", 404);
 
     if (quiz.ownerId.toString() !== session.userId) {
-      return errorResponse("You can edit only your own quiz", 403);
+      return errorResponse("You can only edit your own quizzes", 403);
     }
 
-    if (data.stuatus === "published" && quiz.status !== "published") {
-      const count = await db.collection("questions").countDocuments({ quizId }, { limit: 1 });
+    // Check the date window using the values after this update.
+    const opensAt = data.opensAt !== undefined ? data.opensAt : quiz.opensAt;
+    const closesAt = data.closesAt !== undefined ? data.closesAt : quiz.closesAt;
 
-      if (count === 0) {
-        return errorResponse("Add at least one question before publishing", 409);
-      }
+    if (opensAt && closesAt && closesAt <= opensAt) {
+      return errorResponse("closesAt must be after opensAt", 400);
+    }
+
+    if (data.status === "published" && quiz.status !== "published") {
+      const count = await db.collection("questions").countDocuments({ quizId }, { limit: 1 });
+      if (count === 0) return errorResponse("Add at least one question before publishing", 409);
     }
 
     const updated = await quizzes.findOneAndUpdate(
@@ -102,7 +96,7 @@ export async function PUT(request, { params }) {
 
     return successResponse(serializeQuiz(updated), 200);
   } catch (err) {
-    printExceptionLog("PATCH /api/quizzes/:quiz_id", err);
+    printExceptionLog("PUT /api/quiz/[quiz_id]", err);
 
     return errorResponse("Internal Server Error", 500);
   }
@@ -110,33 +104,31 @@ export async function PUT(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
-    const client = await getClientPromise();
     const { session, response } = await requireRole("instructor");
-
     if (response) return response;
 
-    const { id } = await params;
+    const quizId = await parseObjectId(params, "quiz_id");
+    if (!quizId) return errorResponse("Invalid quiz id", 400);
 
-    if (!ObjectId.isValid(id)) return errorResponse("Invalid quiz id", 400);
-    const quizId = new ObjectId(id);
-
+    const client = await getClientPromise();
     const db = client.db(process.env.DB_NAME);
-    const quizzes = db.collection("quizzes");
+    const quizzes = await db.collection("quizzes");
     const quiz = await quizzes.findOne({ _id: quizId });
 
     if (!quiz) return errorResponse("Quiz not found", 404);
 
     if (quiz.ownerId.toString() !== session.userId) {
-      return errorResponse("YOu can only delete your own quizzes", 403);
+      return errorResponse("You can only delete your own quizzes", 403);
     }
 
-    await db.collection("attemps").deleteMany({ quizId });
+    // Cascade: attempts and questions belong to the quiz.
+    await db.collection("attempts").deleteMany({ quizId });
     await db.collection("questions").deleteMany({ quizId });
     await quizzes.deleteOne({ _id: quizId });
 
-    return new Response(null, { status: 204 });
+    return new Response(null, { status: 204, headers: corsHeaders });
   } catch (err) {
-    printExceptionLog("DELETE /api/quizzes/:id", err);
+    printExceptionLog("DELETE /api/quiz/[quiz_id]", err);
 
     return errorResponse("Internal Server Error", 500);
   }

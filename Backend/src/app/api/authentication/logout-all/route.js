@@ -1,4 +1,4 @@
-import { clearSessonCookie, requireAuth, revokeSession } from "@/app/lib/authentication/session";
+import { clearSessionCookie, requireAuth, revokeSession } from "@/app/lib/authentication/session";
 import { errorResponse, printExceptionLog, successResponse } from "@/app/lib/utils";
 
 export async function POST() {
@@ -8,9 +8,9 @@ export async function POST() {
     if (response) return response;
 
     await revokeSession(session.userId);
-    await clearSessonCookie();
+    await clearSessionCookie();
 
-    return successResponse({}, 204);
+    return successResponse({}, 200);
   } catch (err) {
     printExceptionLog("POST /api/authentication/logout-all", err);
 

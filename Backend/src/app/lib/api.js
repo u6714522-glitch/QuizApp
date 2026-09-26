@@ -22,7 +22,3 @@ export function serializeAttempt(a) {
   }
 }
 
-export function serializeQuestion(doc) {
-  return { ...doc, id: doc._id.toString(), quizId: doc.quizId.toString() };
-}
-

@@ -1,31 +1,43 @@
-import { cookies } from "next/headers";
 import { getClientPromise } from "@/app/lib/mongodb";
-import { signToken, verifyToken } from "@/app/lib/authentication/jwt";
-import { errorResponse } from "@/app/lib/utils";
+import { cookies } from "next/headers";
 import { ObjectId } from "mongodb";
+import { errorResponse } from "@/app/lib/utils";
+import { signToken, verifyToken } from "@/app/lib/authentication/jwt";
 
 export const COOKIE_NAME = "qd_session";
 const MAX_AGE = 60 * 60 * 24 * 7;
+
+async function usersCollection() {
+  const client = await getClientPromise();
+
+  return client.db(process.env.DB_NAME).collection("users");
+}
+
+function cookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.COOKIE_SAMESTIE ?? "lax",
+    path: "/",
+  }
+}
 
 export async function setSessionCookie(token) {
   const store = await cookies();
 
   store.set(COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
+    ...cookieOptions(),
     maxAge: MAX_AGE,
   });
 }
 
-export async function clearSessonCookie() {
+export async function clearSessionCookie() {
   const store = await cookies();
 
   store.delete(COOKIE_NAME);
 }
 
-export async function issueSession(user) {
+export async function issueSession(user)  {
   const token = await signToken({
     userId: user._id,
     email: user.email,
@@ -52,16 +64,15 @@ export async function getSession() {
 
   if (!payload || !ObjectId.isValid(payload.sub)) return null;
 
-  const client = await getClientPromise();
+  const users = await usersCollection();
 
-  const user = client
-    .db("QuizApp")
-    .collection("Users")
-    .findOne({ _id: new ObjectId(payload.sub) }, { projection: { password: 0 } });
+  const user = await users.findOne(
+    { _id: new ObjectId(payload.sub) },
+    { projection: {password:0} },
+  );
 
   if (!user) return null;
-
-  if ((user.tokenVersion ?? 0) !== (payload.v ?? 0)) return null;
+  if((user.tokenVersion ?? 0) !== (payload.v ?? 0)) return null;
 
   return {
     userId: user._id.toString(),
@@ -72,18 +83,13 @@ export async function getSession() {
 }
 
 export async function revokeSession(userId) {
-  const client = await getClientPromise();
+  const users = await usersCollection();
 
-  const result = client
-    .db("QuizApp")
-    .collection("User")
-    .findOneAndUpdate(
-      { _id: new ObjectId(userId) },
-      { $inc: { tokenVersion: 1 }, $set: { updatedAt: new Date() } },
-      { returnDocument: "after", projection: { password: 0 } },
-    );
-
-  return result;
+  return users.findOneAndUpdate(
+    { _id: new ObjectId(userId) },
+    { $inc: {tokenVersion: 1}, $set: {updatedAt: new Date()} },
+    { returnDocument: "after", projection: {password:0} }
+  );
 }
 
 export async function requireAuth() {
@@ -92,7 +98,7 @@ export async function requireAuth() {
   if (!session) {
     return {
       session: null,
-      response: errorResponse(401, "Unauthenticated. Please Sign in to continue"),
+      response: errorResponse("Unauthenticated. Please Sign In to continue.", 401),
     };
   }
 
@@ -100,26 +106,18 @@ export async function requireAuth() {
 }
 
 export async function requireRole(...roles) {
-  const { session, response } = await requireAuth();
-
-  if (!response) return { session, response };
-
-  if (!roles.includes(session.role)) {
-    return {
-      session: null,
-      response: errorResponse(403, "Forbidden. You do not have acess to this"),
-    };
-  }
-
-  return { session, response: null };
+  const { session, response } = await requireAuth()
+  
+  if (response) return { session: null, response };
+  if (!roles.includes(session.role)) return { session: null, response: errorResponse("Unauthorized. You do not have permission to access this resource.", 403) };
+  
+  return { session, response:null }
 }
 
-export async function requireOwner(session, ownerId) {
-  if (session.role === "instructor") return null;
-
+export function requireOwner(session, ownerId) {
   if (String(ownerId) !== session.userId) {
-    return errorResponse(403, "Forbidden. You do not have access to this");
+    return { response: errorResponse("You do not have access to this", 403)};
   }
-
-  return null;
+  
+  return { response: null };
 }

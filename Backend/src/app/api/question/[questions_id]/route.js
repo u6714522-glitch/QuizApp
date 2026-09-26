@@ -1,122 +1,138 @@
-import {getClientPromise} from "@/app/lib/mongodb";
-import {quizAccess, READER_PROJECTION} from "@/app/lib/questions";
-import {errorResponse, printExceptionLog, successResponse} from "@/app/lib/utils";
-import {parseObjectId} from "@/app/lib/params";
-import {serializeQuestion} from "@/app/lib/api";
-import {requireAuth, requireOwner, requireRole} from "@/app/lib/authentication/session";
-import {EDITABLE_FIELDS, questionPatchSchema, questionSchema, toQuestionDoc} from "@/app/lib/validation/question";
+import { getClientPromise } from "@/app/lib/mongodb";
+import { quizAccess, READER_PROJECTION } from "@/app/lib/questions";
+import { errorResponse, printExceptionLog, successResponse } from "@/app/lib/utils";
+import { parseObjectId } from "@/app/lib/params";
+import { serializeQuestion } from "@/app/lib/api";
+import { requireAuth, requireOwner, requireRole } from "@/app/lib/authentication/session";
+import {
+  EDITABLE_FIELDS,
+  questionPatchSchema,
+  questionSchema,
+  toQuestionDoc,
+} from "@/app/lib/validation/question";
+import corsHeaders from "@/app/lib/cors";
 
 async function loadQuestionAndQuiz(db, id) {
   const question = await db.collection("questions").findOne({ _id: id });
   if (!question) return {};
 
-  const quiz = await db.collection("quizzes").findOne(
-    { _id: question.quiId },
-    { projection: {ownerId: 1, status: 1, opensAt: 1, closesAt: 1} }
-  );
+  const quiz = await db
+    .collection("quizzes")
+    .findOne(
+      { _id: question.quizId },
+      { projection: { ownerId: 1, status: 1, opensAt: 1, closesAt: 1 } },
+    );
 
   return { question, quiz };
 }
 
 export async function GET(request, { params }) {
   try {
+    const { session, response } = await requireAuth();
+    if (response) return response;
+
+    const id = await parseObjectId(params, "questions_id");
+    if (!id) return errorResponse("Invalid question id", 400);
+
     const client = await getClientPromise();
     const db = client.db(process.env.DB_NAME);
 
-    const { session, response: unauth } = await requireAuth();
-    if (unauth) return unauth;
-
-    const { id , response: badId } = await parseObjectId(params, "id");
-    if (badId) return badId;
-
     const { question, quiz } = await loadQuestionAndQuiz(db, id);
     const access = quiz && quizAccess(session, quiz);
-    if (!access) return errorResponse("Question not found", 404)
+    if (!access) return errorResponse("Question not found", 404);
 
     if (access === "reader") {
       for (const key of Object.keys(READER_PROJECTION)) delete question[key];
     }
 
-    return successResponse({ question: serializeQuestion(question) }, 200)
+    return successResponse({ question: serializeQuestion(question) }, 200);
   } catch (err) {
-    printExceptionLog("GET /api/question/[questions_id]", err.message);
+    printExceptionLog("GET /api/question/[questions_id]", err);
 
-    return errorResponse("Internal server error", 500)
+    return errorResponse("Internal Server Error", 500);
   }
 }
 
 export async function PUT(request, { params }) {
   try {
+    const { session, response } = await requireRole("instructor");
+    if (response) return response;
+
+    const id = await parseObjectId(params, "questions_id");
+    if (!id) return errorResponse("Invalid question id", 400);
+
     const client = await getClientPromise();
     const db = client.db(process.env.DB_NAME);
-
-    const { session, response: notInstructor } = await requireRole("instructor");
-    if (notInstructor) return notInstructor;
-
-    const { id, response: badId } = await parseObjectId(params, "id");
-    if (badId) return badId;
 
     const { question, quiz } = await loadQuestionAndQuiz(db, id);
     if (!quiz) return errorResponse("Question not found", 404);
 
-    const { response: denied } = await requireOwner(quiz.ownerId)
+    const { response: denied } = requireOwner(session, quiz.ownerId);
     if (denied) return denied;
 
     let body;
 
-    try{
-      body = request.json();
-    } catch  {
+    try {
+      body = await request.json();
+    } catch {
       return errorResponse("Invalid JSON", 400);
     }
 
     const parsed = questionPatchSchema.safeParse(body);
-    if (!parsed.success) return errorResponse("Invalid Body", 400);
-    const data = parsed.data
+    if (!parsed.success) return errorResponse(parsed.error.issues[0].message, 400);
 
-    const current = Object.fromEntries((EDITABLE_FIELDS.map((k) => [k, question[k]])));
-    const result = questionSchema.safeParse({ ...current, ...data });
+    // Merge with the stored question and re-validate the whole thing,
+    // so e.g. a new correctAnswer must still match a choice key.
+    const current = Object.fromEntries(EDITABLE_FIELDS.map((k) => [k, question[k]]));
+    const merged = questionSchema.safeParse({ ...current, ...parsed.data });
+    if (!merged.success) return errorResponse(merged.error.issues[0].message, 400);
 
-    if (!result.success) {
-      return errorResponse("Validation Error for the question", 400)
-    }
+    const updated = await db
+      .collection("questions")
+      .findOneAndUpdate(
+        { _id: id },
+        {
+          $set: {
+            ...toQuestionDoc(merged.data),
+            order: merged.data.order ?? question.order,
+            updatedAt: new Date(),
+          },
+        },
+        { returnDocument: "after" },
+      );
 
-    const updated = await db.collection("questions").findOneAndUpdate(
-      { _id: id },
-      {$set: { ...toQuestionDoc(result.data), order: result.data.order ?? question.order, updatedAt: new Date()} },
-      { returnDocument: "after" }
-    );
- 
     if (!updated) return errorResponse("Question not found", 404);
-    
-    return successResponse({ question: serializeQuestion(updated) }, 201); 
-  } catch (err) { 
-    printExceptionLog("PUT /api/question/[questions_id]", err.message); 
-    
+
+    return successResponse({ question: serializeQuestion(updated) }, 200);
+  } catch (err) {
+    printExceptionLog("PUT /api/question/[questions_id]", err);
+
     return errorResponse("Internal Server Error", 500);
   }
 }
 
 export async function DELETE(request, { params }) {
   try {
+    const { session, response } = await requireRole("instructor");
+    if (response) return response;
+
+    const id = await parseObjectId(params, "questions_id");
+    if (!id) return errorResponse("Invalid question id", 400);
+
     const client = await getClientPromise();
     const db = client.db(process.env.DB_NAME);
 
-    const { id, response: badId } = await parseObjectId(params, "id");
-    if (badId) return badId;
-
     const { quiz } = await loadQuestionAndQuiz(db, id);
-    if (!quiz) return errorResponse("Quiz not found", 404);
+    if (!quiz) return errorResponse("Question not found", 404);
 
-    const { response: denied } = await requireOwner(quiz.ownerId);
+    const { response: denied } = requireOwner(session, quiz.ownerId);
     if (denied) return denied;
 
-    const deleted = await db.collection("questions").deleteOne({ _id: id });
-    if (deleted.deletedCount === 0) return errorResponse("Question not found", 404);
+    await db.collection("questions").deleteOne({ _id: id });
 
-    return successResponse({ message: serializeQuestion(deleted) }, 204);
+    return new Response(null, { status: 204, headers: corsHeaders });
   } catch (err) {
-    printExceptionLog("DELETE /api/question/[questions_id]", err.message);
+    printExceptionLog("DELETE /api/question/[questions_id]", err);
 
     return errorResponse("Internal Server Error", 500);
   }

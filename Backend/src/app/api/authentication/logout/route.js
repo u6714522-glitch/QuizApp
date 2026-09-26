@@ -1,9 +1,9 @@
-import { clearSessonCookie } from "@/app/lib/authentication/session";
+import { clearSessionCookie } from "@/app/lib/authentication/session";
 import { printExceptionLog, successResponse, errorResponse } from "@/app/lib/utils";
 
 export async function POST() {
   try {
-    await clearSessonCookie();
+    await clearSessionCookie();
 
     return successResponse({}, 200);
   } catch (err) {
