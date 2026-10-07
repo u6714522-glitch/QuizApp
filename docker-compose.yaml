@@ -1,3 +1,9 @@
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "1000m"
+    max-file: "3"
+
 services:
   backend:
     build: ./Backend
@@ -6,13 +12,12 @@ services:
     env_file: ./Backend/.env.production
     ports:
       - "127.0.0.1:4000:3000"
+    logging: *logging
 
   frontend:
-    build:
-      context: ./Frontend
-      args:
-        NEXT_PUBLIC_API_URL: https://api.quizapp.com
+    build: ./Frontend
     image: quizdeck-frontend
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"
+    logging: *logging:3000"
