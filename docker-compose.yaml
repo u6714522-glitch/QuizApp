@@ -1,0 +1,18 @@
+services:
+  backend:
+    build: ./Backend
+    image: quizdeck-backend
+    restart: unless-stopped
+    env_file: ./Backend/.env.production
+    ports:
+      - "127.0.0.1:4000:3000"
+
+  frontend:
+    build:
+      context: ./Frontend
+      args:
+        NEXT_PUBLIC_API_URL: https://api.quizapp.com
+    image: quizdeck-frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
