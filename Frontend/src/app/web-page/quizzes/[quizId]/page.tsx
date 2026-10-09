@@ -34,6 +34,10 @@ import {
 
 export default function QuizPage() {
   const { quizId } = useParams<{ quizId: string }>();
+  return <QuizDetails key={quizId} quizId={quizId} />;
+}
+
+function QuizDetails({ quizId }: { quizId: string }) {
   const router = useRouter();
   const session = useSession();
   const [quiz, setQuiz] = useState<Quiz | null>(null);
@@ -50,8 +54,6 @@ export default function QuizPage() {
   useEffect(() => {
     if (!session.user) return;
     const controller = new AbortController();
-    setLoading(true);
-    setError("");
     Promise.all([
       api<{ quiz: Quiz; questions: Question[] }>("/api/quiz/" + quizId, {
         signal: controller.signal,
@@ -194,9 +196,13 @@ export default function QuizPage() {
           Back to Quizzes
         </Link>
         <button
-          className={secondary}
-          disabled={loading || busy}
-          onClick={() => setRevision((value) => value + 1)}
+        className={secondary}
+        disabled={loading || busy}
+        onClick={() => {
+          setLoading(true);
+          setError("");
+          setRevision((value) => value + 1);
+        }}
         >
           Refresh
         </button>

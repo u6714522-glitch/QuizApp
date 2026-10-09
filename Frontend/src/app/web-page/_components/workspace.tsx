@@ -82,7 +82,7 @@ export function Workspace({
   children,
 }: {
   session: ReturnType<typeof useSession>;
-  active: "dashboard" | "quizzes" | "attempts";
+  active: "dashboard" | "quizzes" | "attempts" | "invitations";
   title: string;
   description?: string;
   children: ReactNode;
@@ -136,6 +136,13 @@ export function Workspace({
       path: "/web-page/attempts",
     },
   ];
+  if (user.role === "instructor" && user.canInviteInstructors === true) {
+  links.push({
+    key: "invitations",
+    label: "Invite Instructor",
+    path: "/web-page/invitations",
+  });
+}
   return (
     <div className="min-h-screen bg-[#f8f7f5] text-stone-900 lg:grid lg:grid-cols-[240px_1fr]">
       <aside className="flex flex-col bg-[#26211e] px-6 py-7 text-white lg:sticky lg:top-0 lg:h-screen">
