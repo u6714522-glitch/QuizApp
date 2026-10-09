@@ -22,6 +22,7 @@ import {
   primary,
   secondary,
 } from "../_components/workspace";
+import { InviteInstructor } from "../_components/invite-instructor";
 
 export default function DashboardPage() {
   const session = useSession();
@@ -30,16 +31,18 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
+
   useEffect(() => {
     if (!session.user) return;
     const controller = new AbortController();
+
     Promise.all([
       allQuizzes(controller.signal),
       api<Attempt[]>("/api/attempt", { signal: controller.signal }),
     ])
       .then(([items, results]) => {
-        if (!Array.isArray(results))
-          throw new Error("Unexpected attempt response.");
+        if (!Array.isArray(results)) throw new Error("Unexpected attempt response.");
+
         if (!controller.signal.aborted) {
           setQuizzes(items);
           setAttempts(results);
@@ -51,21 +54,21 @@ export default function DashboardPage() {
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
+
     return () => controller.abort();
   }, [session.user, revision]);
   const instructor = session.user?.role === "instructor";
   const completed = attempts.filter((attempt) => attempt.status === "graded");
-  const scored = completed.filter(
-    (attempt) => attempt.score !== null && attempt.maxScore > 0,
-  );
+
+  const scored = completed.filter((attempt) => attempt.score !== null && attempt.maxScore > 0);
+
   const average = scored.length
-    ? Math.round(
-        scored.reduce(
-          (sum, attempt) => sum + (attempt.score! / attempt.maxScore) * 100,
-          0,
-        ) / scored.length,
-      ) + "%"
+    ? `${Math.round(
+        scored.reduce((sum, attempt) => sum + (attempt.score! / attempt.maxScore) * 100, 0) /
+          scored.length,
+      )}%`
     : "—";
+
   const stats = instructor
     ? [
         { label: "My Quizzes", value: quizzes.length },
@@ -83,11 +86,12 @@ export default function DashboardPage() {
         { label: "Completed Attempts", value: completed.length },
         { label: "Average Score", value: average },
       ];
+
   return (
     <Workspace
       session={session}
       active="dashboard"
-      title={"Welcome back, " + (session.user?.name || "")}
+      title={`Welcome back, ${session.user?.name || ""}`}
       description={
         instructor
           ? "Create classroom quizzes and review student results."
@@ -102,7 +106,7 @@ export default function DashboardPage() {
             setLoading(true);
             setError("");
             setRevision((value) => value + 1);
-        }}
+          }}
         >
           Refresh
         </button>
@@ -126,6 +130,7 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
+          {session.user?.isAdmin && <InviteInstructor />}
           <section className="mt-10">
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="text-xl font-semibold">
@@ -149,9 +154,7 @@ export default function DashboardPage() {
                 {quizzes.slice(0, 4).map((quiz) => (
                   <article className={card} key={quiz.id}>
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="text-xs font-medium text-orange-600">
-                        {quiz.subject}
-                      </p>
+                      <p className="text-xs font-medium text-orange-600">{quiz.subject}</p>
                       <Badge>{availability(quiz)}</Badge>
                     </div>
                     <h3 className="mt-3 text-lg font-semibold">{quiz.title}</h3>
@@ -159,14 +162,9 @@ export default function DashboardPage() {
                       {quiz.description || "No description provided."}
                     </p>
                     <p className="mt-4 text-xs text-stone-500">
-                      {quiz.timeLimitMinutes
-                        ? quiz.timeLimitMinutes + " minutes"
-                        : "No time limit"}
+                      {quiz.timeLimitMinutes ? `${quiz.timeLimitMinutes} minutes` : "No time limit"}
                     </p>
-                    <Link
-                      className={secondary + " mt-5"}
-                      href={"/web-page/quizzes/" + quiz.id}
-                    >
+                    <Link className={`${secondary} mt-5`} href={`/web-page/quizzes/${quiz.id}`}>
                       {instructor ? "Manage Quiz" : "View Quiz"}
                     </Link>
                   </article>
@@ -213,14 +211,11 @@ export default function DashboardPage() {
                   </thead>
                   <tbody>
                     {attempts.slice(0, 5).map((attempt) => (
-                      <tr
-                        className="border-b border-stone-100 last:border-0"
-                        key={attempt.id}
-                      >
+                      <tr className="border-b border-stone-100 last:border-0" key={attempt.id}>
                         <td className="px-5 py-4">
                           <Link
                             className="font-medium text-orange-700 hover:underline"
-                            href={"/web-page/attempts/" + attempt.id}
+                            href={`/web-page/attempts/${attempt.id}`}
                           >
                             {attempt.quiz?.title || "Unavailable quiz"}
                           </Link>
@@ -237,7 +232,7 @@ export default function DashboardPage() {
                         </td>
                         <td className="whitespace-nowrap px-5 py-4">
                           {attempt.status === "graded" && attempt.score !== null
-                            ? attempt.score + " / " + attempt.maxScore
+                            ? `${attempt.score} / ${attempt.maxScore}`
                             : "—"}
                         </td>
                         <td className="whitespace-nowrap px-5 py-4 text-stone-500">

@@ -1,15 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState, type FormEvent } from "react";
 
-const API_URL = (
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
-).replace(/\/$/, "");
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000").replace(/\/$/, "");
 
+// useSearchParams needs a Suspense boundary, or `next build` fails.
 export default function RegisterPage() {
+  return (
+    <Suspense>
+      <RegisterForm />
+    </Suspense>
+  );
+}
+
+function RegisterForm() {
   const router = useRouter();
+  const inviteToken = useSearchParams().get("invite") ?? "";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,11 +35,13 @@ export default function RegisterPage() {
 
     if (!name.trim()) {
       setError("Please enter your name.");
+
       return;
     }
 
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
+
       return;
     }
 
@@ -46,27 +56,25 @@ export default function RegisterPage() {
           name: name.trim(),
           email: email.trim(),
           password,
+          ...(inviteToken && { inviteToken }),
         }),
       });
 
       const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(
-          data?.error?.message || "Unable to create your account.",
-        );
+        throw new Error(data?.error?.message || "Unable to create your account.");
       }
 
-      if (
-        typeof data?.user?.id !== "string" ||
-        data?.user?.role !== "student"
-      ) {
+      const role = data?.user?.role;
+
+      if (typeof data?.user?.id !== "string" || !["student", "instructor"].includes(role)) {
         throw new Error("Unexpected response. Please try signing in.");
       }
 
       setPassword("");
       setConfirmPassword("");
-      setSuccess("Account created. You are now signed in as a student.");
+      setSuccess(`Account created. You are now signed in as ${role}.`);
       router.replace("/web-page/dashboard");
     } catch (err) {
       setError(
@@ -118,7 +126,9 @@ export default function RegisterPage() {
           </h1>
 
           <p className="mx-auto mt-8 max-w-xs text-center text-sm leading-7 text-stone-400">
-            Join your classroom, take quizzes, and track your learning progress.
+            {inviteToken
+              ? "Create quizzes, publish them to your class, and review student results."
+              : "Join your classroom, take quizzes, and track your learning progress."}
           </p>
         </section>
 
@@ -151,8 +161,17 @@ export default function RegisterPage() {
               Create Account
             </h2>
             <p className="mb-7 mt-3 text-sm text-stone-500">
-              Create your student account to get started.
+              {inviteToken
+                ? "Create your instructor account."
+                : "Create your student account to get started."}
             </p>
+
+            {inviteToken && (
+              <p className="mb-5 rounded-2xl bg-orange-50 p-3 text-sm text-orange-800">
+                You&apos;ve been invited as an instructor. Register with the email address the
+                invitation was sent to.
+              </p>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -247,19 +266,13 @@ export default function RegisterPage() {
               </div>
 
               {error && (
-                <p
-                  role="alert"
-                  className="rounded-2xl bg-red-50 p-3 text-sm text-red-700"
-                >
+                <p role="alert" className="rounded-2xl bg-red-50 p-3 text-sm text-red-700">
                   {error}
                 </p>
               )}
 
               {success && (
-                <p
-                  role="status"
-                  className="rounded-2xl bg-emerald-50 p-3 text-sm text-emerald-700"
-                >
+                <p role="status" className="rounded-2xl bg-emerald-50 p-3 text-sm text-emerald-700">
                   {success}
                 </p>
               )}
@@ -269,20 +282,13 @@ export default function RegisterPage() {
                 disabled={disabled}
                 className="w-full rounded-full bg-gradient-to-b from-[#ff5a00] via-[#ff4a24] to-[#e44984] px-6 py-4 text-sm font-medium text-white transition hover:brightness-105 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {loading
-                  ? "Creating account..."
-                  : success
-                    ? "Account Created"
-                    : "Create Account"}
+                {loading ? "Creating account..." : success ? "Account Created" : "Create Account"}
               </button>
             </form>
 
             <p className="mt-6 text-center text-sm text-stone-500">
               Already have an account?{" "}
-              <Link
-                href="/web-page/login"
-                className="font-medium text-orange-600 hover:underline"
-              >
+              <Link href="/web-page/login" className="font-medium text-orange-600 hover:underline">
                 Sign In
               </Link>
             </p>
