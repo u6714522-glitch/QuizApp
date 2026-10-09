@@ -6,9 +6,7 @@ import { useState, type FormEvent } from "react";
 
 type Role = "student" | "instructor";
 
-const API_URL = (
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
-).replace(/\/$/, "");
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000").replace(/\/$/, "");
 
 export default function LoginPage() {
   const router = useRouter();
@@ -39,9 +37,7 @@ export default function LoginPage() {
       const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(
-          data?.error?.message || "Unable to sign in. Please try again.",
-        );
+        throw new Error(data?.error?.message || "Unable to sign in. Please try again.");
       }
 
       const user = data?.user;
@@ -56,9 +52,7 @@ export default function LoginPage() {
 
       setRole(user.role);
       setPassword("");
-      setSuccess(
-        `Welcome, ${user.name}. You are signed in as ${user.role}.`,
-      );
+      setSuccess(`Welcome, ${user.name}. You are signed in as ${user.role}.`);
       router.replace("/web-page/dashboard");
     } catch (err) {
       setError(
@@ -118,9 +112,7 @@ export default function LoginPage() {
 
               <div className="flex items-center justify-between text-[10px]">
                 <span className="font-bold">QuizDeck</span>
-                <span className="rounded-full bg-orange-100 px-2 py-1 text-orange-700">
-                  12:45
-                </span>
+                <span className="rounded-full bg-orange-100 px-2 py-1 text-orange-700">12:45</span>
               </div>
 
               <p className="mt-6 text-[9px] font-medium uppercase tracking-widest text-stone-400">
@@ -134,24 +126,16 @@ export default function LoginPage() {
                 <div className="h-full w-2/5 rounded-full bg-orange-500" />
               </div>
 
-              <p className="mt-4 text-[9px] text-stone-400">
-                QUESTION 4 OF 10
-              </p>
-              <p className="mt-2 text-xs font-medium">
-                Which method retrieves data from an API?
-              </p>
+              <p className="mt-4 text-[9px] text-stone-400">QUESTION 4 OF 10</p>
+              <p className="mt-2 text-xs font-medium">Which method retrieves data from an API?</p>
 
               <div className="mt-4 space-y-2 text-[10px]">
                 <div className="rounded-lg border border-orange-400 bg-orange-50 px-3 py-2 font-semibold text-orange-700">
                   A. GET
                   <span className="float-right">✓</span>
                 </div>
-                <div className="rounded-lg border border-stone-200 px-3 py-2">
-                  B. DELETE
-                </div>
-                <div className="rounded-lg border border-stone-200 px-3 py-2">
-                  C. PATCH
-                </div>
+                <div className="rounded-lg border border-stone-200 px-3 py-2">B. DELETE</div>
+                <div className="rounded-lg border border-stone-200 px-3 py-2">C. PATCH</div>
               </div>
 
               <div className="mt-4 rounded-full bg-gradient-to-r from-orange-500 to-pink-500 py-2 text-center text-[10px] font-medium text-white">
@@ -232,9 +216,7 @@ export default function LoginPage() {
                   type="button"
                   onClick={() => setShowPassword((value) => !value)}
                   disabled={loading}
-                  aria-label={
-                    showPassword ? "Hide password" : "Show password"
-                  }
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                   aria-pressed={showPassword}
                   className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-2 text-stone-400 hover:text-stone-700 focus-visible:outline-2 focus-visible:outline-orange-500"
                 >
@@ -283,19 +265,13 @@ export default function LoginPage() {
               </fieldset>
 
               {error && (
-                <p
-                  role="alert"
-                  className="rounded-2xl bg-red-50 p-3 text-sm text-red-700"
-                >
+                <p role="alert" className="rounded-2xl bg-red-50 p-3 text-sm text-red-700">
                   {error}
                 </p>
               )}
 
               {success && (
-                <p
-                  role="status"
-                  className="rounded-2xl bg-emerald-50 p-3 text-sm text-emerald-700"
-                >
+                <p role="status" className="rounded-2xl bg-emerald-50 p-3 text-sm text-emerald-700">
                   {success}
                 </p>
               )}

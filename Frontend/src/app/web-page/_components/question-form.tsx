@@ -21,13 +21,13 @@ export function QuestionForm({
   onSave: (data: QuestionInput) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [type, setType] = useState<QuestionType>(
-    question?.type || "multiple_choice",
-  );
+  const [type, setType] = useState<QuestionType>(question?.type || "multiple_choice");
+
   const [prompt, setPrompt] = useState(question?.prompt || "");
   const [points, setPoints] = useState(question?.points ?? 1);
   const [order, setOrder] = useState(question?.order || nextOrder);
   const [explanation, setExplanation] = useState(question?.explanation || "");
+
   const [choices, setChoices] = useState<Choice[]>(
     question?.type === "multiple_choice"
       ? question.choices
@@ -36,45 +36,48 @@ export function QuestionForm({
           { key: "B", text: "" },
         ],
   );
+
   const [answer, setAnswer] = useState(question?.correctAnswer || "A");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
   function changeType(value: QuestionType) {
     setType(value);
-    setAnswer(
-      value === "multiple_choice"
-        ? choices[0].key
-        : value === "true_false"
-          ? "true"
-          : "",
-    );
+    setAnswer(value === "multiple_choice" ? choices[0].key : value === "true_false" ? "true" : "");
   }
+
   function addChoice() {
     const key = "ABCDEFGHIJ"
       .split("")
       .find((letter) => !choices.some((choice) => choice.key === letter));
+
     if (key && choices.length < 10) setChoices([...choices, { key, text: "" }]);
   }
+
   function removeChoice(key: string) {
     const rest = choices.filter((choice) => choice.key !== key);
+
     setChoices(rest);
     if (answer === key) setAnswer(rest[0].key);
   }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
     setError("");
+
     if (!prompt.trim() || !answer.trim()) {
       setError("Question and correct answer are required.");
+
       return;
     }
-    if (
-      type === "multiple_choice" &&
-      choices.some((choice) => !choice.text.trim())
-    ) {
+
+    if (type === "multiple_choice" && choices.some((choice) => !choice.text.trim())) {
       setError("Every choice needs text.");
+
       return;
     }
+
     const data: QuestionInput = {
       type,
       prompt: prompt.trim(),
@@ -83,12 +86,14 @@ export function QuestionForm({
       explanation: explanation.trim(),
       correctAnswer: answer.trim(),
     };
+
     if (type === "multiple_choice")
       data.choices = choices.map((choice) => ({
         ...choice,
         text: choice.text.trim(),
       }));
     setBusy(true);
+
     try {
       await onSave(data);
     } catch (err) {
@@ -97,6 +102,7 @@ export function QuestionForm({
       setBusy(false);
     }
   }
+
   return (
     <form onSubmit={submit} className="space-y-4">
       <fieldset disabled={busy} className="space-y-4">
@@ -125,7 +131,7 @@ export function QuestionForm({
             {choices.map((choice) => (
               <div key={choice.key} className="flex items-end gap-2">
                 <div className="flex-1">
-                  <Field label={"Choice " + choice.key}>
+                  <Field label={`Choice ${choice.key}`}>
                     <input
                       className={input}
                       required
@@ -134,9 +140,7 @@ export function QuestionForm({
                       onChange={(e) =>
                         setChoices(
                           choices.map((item) =>
-                            item.key === choice.key
-                              ? { ...item, text: e.target.value }
-                              : item,
+                            item.key === choice.key ? { ...item, text: e.target.value } : item,
                           ),
                         )
                       }
@@ -145,10 +149,10 @@ export function QuestionForm({
                 </div>
                 <button
                   type="button"
-                  className={danger + " mb-1"}
+                  className={`${danger} mb-1`}
                   disabled={choices.length <= 2}
                   onClick={() => removeChoice(choice.key)}
-                  aria-label={"Remove choice " + choice.key}
+                  aria-label={`Remove choice ${choice.key}`}
                 >
                   Remove
                 </button>
@@ -166,23 +170,15 @@ export function QuestionForm({
         )}
         <Field label="Correct answer">
           {type === "multiple_choice" ? (
-            <select
-              className={input}
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-            >
+            <select className={input} value={answer} onChange={(e) => setAnswer(e.target.value)}>
               {choices.map((choice) => (
                 <option key={choice.key} value={choice.key}>
-                  {choice.key + ". " + (choice.text || "Choice " + choice.key)}
+                  {`${choice.key}. ${choice.text || `Choice ${choice.key}`}`}
                 </option>
               ))}
             </select>
           ) : type === "true_false" ? (
-            <select
-              className={input}
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-            >
+            <select className={input} value={answer} onChange={(e) => setAnswer(e.target.value)}>
               <option value="true">True</option>
               <option value="false">False</option>
             </select>
@@ -236,12 +232,7 @@ export function QuestionForm({
         <button className={primary} disabled={busy}>
           {busy ? "Saving..." : question ? "Save Question" : "Add Question"}
         </button>
-        <button
-          type="button"
-          className={secondary}
-          disabled={busy}
-          onClick={onCancel}
-        >
+        <button type="button" className={secondary} disabled={busy} onClick={onCancel}>
           Cancel
         </button>
       </div>

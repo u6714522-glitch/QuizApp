@@ -22,19 +22,26 @@ export function QuizForm({
   const [closes, setCloses] = useState(localDate(quiz?.closesAt || null));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
     setError("");
+
     if (!title.trim() || !subject.trim()) {
       setError("Title and subject are required.");
+
       return;
     }
+
     if (opens && closes && new Date(closes) <= new Date(opens)) {
       setError("Closing time must be after opening time.");
+
       return;
     }
+
     setBusy(true);
+
     try {
       const data: QuizInput = {
         title: title.trim(),
@@ -43,10 +50,9 @@ export function QuizForm({
         timeLimitMinutes: minutes,
         passingScore: passing,
       };
-      if (quiz || opens)
-        data.opensAt = opens ? new Date(opens).toISOString() : null;
-      if (quiz || closes)
-        data.closesAt = closes ? new Date(closes).toISOString() : null;
+
+      if (quiz || opens) data.opensAt = opens ? new Date(opens).toISOString() : null;
+      if (quiz || closes) data.closesAt = closes ? new Date(closes).toISOString() : null;
       await onSave(data);
     } catch (err) {
       setError(message(err));
@@ -54,6 +60,7 @@ export function QuizForm({
       setBusy(false);
     }
   }
+
   return (
     <form onSubmit={submit} className="space-y-4">
       <fieldset disabled={busy} className="space-y-4">
@@ -133,12 +140,7 @@ export function QuizForm({
           {busy ? "Saving..." : quiz ? "Save Settings" : "Create Quiz"}
         </button>
         {onCancel && (
-          <button
-            type="button"
-            className={secondary}
-            disabled={busy}
-            onClick={onCancel}
-          >
+          <button type="button" className={secondary} disabled={busy} onClick={onCancel}>
             Cancel
           </button>
         )}
