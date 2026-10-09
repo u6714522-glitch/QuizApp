@@ -19,7 +19,7 @@ function cookieOptions() {
     secure: process.env.NODE_ENV === "production",
     sameSite: process.env.COOKIE_SAMESTIE ?? "lax",
     path: "/",
-  }
+  };
 }
 
 export async function setSessionCookie(token) {
@@ -37,7 +37,7 @@ export async function clearSessionCookie() {
   store.delete(COOKIE_NAME);
 }
 
-export async function issueSession(user)  {
+export async function issueSession(user) {
   const token = await signToken({
     userId: user._id,
     email: user.email,
@@ -68,16 +68,17 @@ export async function getSession() {
 
   const user = await users.findOne(
     { _id: new ObjectId(payload.sub) },
-    { projection: {password:0} },
+    { projection: { password: 0 } },
   );
 
   if (!user) return null;
-  if((user.tokenVersion ?? 0) !== (payload.v ?? 0)) return null;
+  if ((user.tokenVersion ?? 0) !== (payload.v ?? 0)) return null;
 
   return {
     userId: user._id.toString(),
     email: user.email,
     role: user.role,
+    isAdmin: user.isAdmin === true,
     user,
   };
 }
@@ -87,8 +88,8 @@ export async function revokeSession(userId) {
 
   return users.findOneAndUpdate(
     { _id: new ObjectId(userId) },
-    { $inc: {tokenVersion: 1}, $set: {updatedAt: new Date()} },
-    { returnDocument: "after", projection: {password:0} }
+    { $inc: { tokenVersion: 1 }, $set: { updatedAt: new Date() } },
+    { returnDocument: "after", projection: { password: 0 } },
   );
 }
 
@@ -106,18 +107,37 @@ export async function requireAuth() {
 }
 
 export async function requireRole(...roles) {
-  const { session, response } = await requireAuth()
-  
+  const { session, response } = await requireAuth();
+
   if (response) return { session: null, response };
-  if (!roles.includes(session.role)) return { session: null, response: errorResponse("Unauthorized. You do not have permission to access this resource.", 403) };
-  
-  return { session, response:null }
+  if (!roles.includes(session.role))
+    return {
+      session: null,
+      response: errorResponse(
+        "Unauthorized. You do not have permission to access this resource.",
+        403,
+      ),
+    };
+
+  return { session, response: null };
 }
 
 export function requireOwner(session, ownerId) {
   if (String(ownerId) !== session.userId) {
-    return { response: errorResponse("You do not have access to this", 403)};
+    return { response: errorResponse("You do not have access to this", 403) };
   }
-  
+
   return { response: null };
+}
+
+export async function requireAdmin() {
+  const { session, response } = await requireRole("instructor");
+
+  if (response) return { session: null, response: null };
+
+  if (!session.isAdmin) {
+    return { session: null, response: errorResponse("Only an admin can invite instructor.", 403) };
+  }
+
+  return { session, response: null };
 }

@@ -8,7 +8,15 @@ export async function GET() {
   const { user } = session;
 
   return successResponse(
-    { user: { id: session.userId, name: user.name, email: session.email, role: session.role } },
+    {
+      user: {
+        id: session.userId,
+        name: user.name,
+        email: session.email,
+        role: session.role,
+        isAdmin: session.isAdmin,
+      },
+    },
     200,
   );
 }
