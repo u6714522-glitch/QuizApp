@@ -15,7 +15,7 @@ export async function GET(request, { params }) {
     if (!quizId) return errorResponse("Invalid quiz id", 400);
 
     const client = await getClientPromise();
-    const db = client.db(process.env.DB_NAME)
+    const db = client.db(process.env.DB_NAME);
 
     const quiz = await db.collection("quizzes").findOne({ _id: quizId });
     const isOwner = quiz && quiz.ownerId.toString() === session.userId;

@@ -5,5 +5,3 @@ export async function parseObjectId(params, key) {
 
   return ObjectId.isValid(value) ? new ObjectId(value) : null;
 }
-
-

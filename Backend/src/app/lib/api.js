@@ -17,8 +17,7 @@ export function serializeAttempt(a) {
     ...(answers && {
       answers: answers.map(({ questionId, ...x }) => ({ ...x, questionId: questionId.toString() })),
     }),
-    ...(student && { student: { id: student._id.toString(), name: student.name }}),
-    ...(quiz && { quiz: { id: quiz._id.toString(), title: quiz.title }}),
-  }
+    ...(student && { student: { id: student._id.toString(), name: student.name } }),
+    ...(quiz && { quiz: { id: quiz._id.toString(), title: quiz.title } }),
+  };
 }
-

@@ -1,13 +1,15 @@
 export const GRACE_MS = 30_000; // allowance for network latency on the final submit
 
-const norm = (v) => String(v ?? '').trim().toLowerCase();
+const norm = (v) =>
+  String(v ?? "")
+    .trim()
+    .toLowerCase();
 
 export function isAnswerCorrect(question, given) {
-  if (given === null || given === undefined || given === '') return false;
+  if (given === null || given === undefined || given === "") return false;
 
   return norm(given) === norm(question.correctAnswer);
 }
-
 
 export function gradeAttempt(questions, savedAnswers) {
   const givenById = new Map(savedAnswers.map((a) => [a.questionId.toString(), a.given]));
@@ -28,7 +30,6 @@ export function gradeAttempt(questions, savedAnswers) {
 
   return { answers, score, maxScore };
 }
-
 
 export function isPastDeadline(attempt, quiz, now = new Date()) {
   const limits = [];

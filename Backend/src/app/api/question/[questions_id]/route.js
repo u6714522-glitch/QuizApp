@@ -87,19 +87,17 @@ export async function PUT(request, { params }) {
     const merged = questionSchema.safeParse({ ...current, ...parsed.data });
     if (!merged.success) return errorResponse(merged.error.issues[0].message, 400);
 
-    const updated = await db
-      .collection("questions")
-      .findOneAndUpdate(
-        { _id: id },
-        {
-          $set: {
-            ...toQuestionDoc(merged.data),
-            order: merged.data.order ?? question.order,
-            updatedAt: new Date(),
-          },
+    const updated = await db.collection("questions").findOneAndUpdate(
+      { _id: id },
+      {
+        $set: {
+          ...toQuestionDoc(merged.data),
+          order: merged.data.order ?? question.order,
+          updatedAt: new Date(),
         },
-        { returnDocument: "after" },
-      );
+      },
+      { returnDocument: "after" },
+    );
 
     if (!updated) return errorResponse("Question not found", 404);
 

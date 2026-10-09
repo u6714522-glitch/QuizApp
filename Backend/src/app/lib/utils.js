@@ -18,11 +18,8 @@ export function printExceptionLog(logMessage, error) {
   console.log(error);
 }
 
-export function errorResponse(message, status, code = ERROR_CODES) {
-  return NextResponse.json(
-    { error: {code, message} },
-    {status, headers: corsHeaders}
-  )
+export function errorResponse(message, status, code = ERROR_CODES[status] ?? "ERROR") {
+  return NextResponse.json({ error: { code, message } }, { status, headers: corsHeaders });
 }
 
 export function successResponse(jsonData, status) {

@@ -1,11 +1,11 @@
-import {z} from "zod";
-import {ObjectId} from "mongodb";
+import { z } from "zod";
+import { ObjectId } from "mongodb";
 
 const objectIdField = z.instanceof(ObjectId);
 
-export const objectIdString = z.string().regex(/^[a-f\d]{24}$/i, 'Invalid id');
+export const objectIdString = z.string().regex(/^[a-f\d]{24}$/i, "Invalid id");
 
-export const ATTEMPT_STATUS = z.enum(["in_progress", "submitted", "graded" ]);
+export const ATTEMPT_STATUS = z.enum(["in_progress", "submitted", "graded"]);
 
 export const attemptAnswerSchema = z
   .object({
@@ -55,25 +55,33 @@ export const attemptSchema = z
       issue("submittedAt", "submittedAt is before startedAt");
   });
 
-export const startAttemptSchema = z.object({
-  quizId: objectIdString,
-}).strict();
+export const startAttemptSchema = z
+  .object({
+    quizId: objectIdString,
+  })
+  .strict();
 
 /** @type {import('zod').ZodTypeAny} */
-export const updateAttemptSchema = z.object({
-  action: z.enum(['save', 'submit']),
-  answers: z.array(
-    z.object({
-      questionId: objectIdString,
-      given: z.string().trim().max(2000).nullable(),
-    }).strict(),
-  ).max(200).default([]),
-})
+export const updateAttemptSchema = z
+  .object({
+    action: z.enum(["save", "submit"]),
+    answers: z
+      .array(
+        z
+          .object({
+            questionId: objectIdString,
+            given: z.string().trim().max(2000).nullable(),
+          })
+          .strict(),
+      )
+      .max(200)
+      .default([]),
+  })
   .strict()
-  .refine(
-    (d) => new Set(d.answers.map((a) => a.questionId)).size === d.answers.length,
-    { message: 'Duplicate questionId in answers', path: ['answers'] },
-  );
+  .refine((d) => new Set(d.answers.map((a) => a.questionId)).size === d.answers.length, {
+    message: "Duplicate questionId in answers",
+    path: ["answers"],
+  });
 
 export const listAttemptsQuerySchema = z.object({
   quizId: objectIdString.optional(),

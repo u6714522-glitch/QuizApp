@@ -29,7 +29,7 @@ export async function GET(request) {
       if (!QUIZ_STATUSES.includes(status)) return errorResponse("Invalid status filter", 400);
       filter.status = status;
     }
-    
+
     const client = await getClientPromise();
     const db = client.db(process.env.DB_NAME);
 
@@ -83,7 +83,7 @@ export async function POST(request) {
     };
 
     const client = await getClientPromise();
-    const db = client.db(process.env.DB_NAME)
+    const db = client.db(process.env.DB_NAME);
 
     await db.collection("quizzes").insertOne(quiz); // adds quiz._id
 
