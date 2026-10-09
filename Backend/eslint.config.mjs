@@ -1,11 +1,11 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
-import eslintConfigPrettier from "eslint-config-prettier";
+import eslintConfigPrettierRecommended from "eslint-config-prettier";
 import globals from "globals";
 
 // Division of labour:
-//   Prettier  -> formatting (see .prettierrc, run via `npm run format`)
-//   ESLint    -> correctness and the few style rules Prettier does not cover
+//   Prettier -> formatting (see .prettierrc, run via `npm run format`)
+//   ESLint -> correctness and the few style rules Prettier does not cover
 // eslintConfigPrettier near the bottom switches off every ESLint rule that
 // would argue with Prettier, so no formatting rules are declared here.
 
@@ -160,7 +160,7 @@ const eslintConfig = defineConfig([
 
   // Prettier compat (must be last of the shared configs).
   // Turns off every ESLint rule that overlaps with Prettier's formatting.
-  eslintConfigPrettier,
+  eslintConfigPrettierRecommended,
 ]);
 
 export default eslintConfig;
