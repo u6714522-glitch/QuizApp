@@ -13,6 +13,7 @@ export type Quiz = {
   ownerId: string;
   title: string;
   subject: string;
+  courseCode: string | null;
   description: string;
   status: QuizStatus;
   timeLimitMinutes: number;
@@ -62,11 +63,30 @@ export type Attempt = {
 export type QuizInput = {
   title: string;
   subject: string;
+  courseCode: string | null;
   description: string;
   timeLimitMinutes: number;
   passingScore: number;
   opensAt?: string | null;
   closesAt?: string | null;
+};
+
+export type Course = {
+  id: string;
+  ownerId: string;
+  code: string;
+  name: string;
+  studentCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CourseStudent = { id: string; name: string; email: string };
+
+export type CourseDetail = {
+  course: Course;
+  students: CourseStudent[];
+  quizCount: number;
 };
 
 export type QuestionInput = {

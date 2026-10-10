@@ -76,7 +76,7 @@ export function Workspace({
   children,
 }: {
   session: ReturnType<typeof useSession>;
-  active: "dashboard" | "quizzes" | "attempts";
+  active: "dashboard" | "quizzes" | "courses" | "attempts";
   title: string;
   description?: string;
   children: ReactNode;
@@ -126,6 +126,7 @@ export function Workspace({
       label: user.role === "instructor" ? "My Quizzes" : "Available Quizzes",
       path: "/web-page/quizzes",
     },
+    { key: "courses", label: "My Courses", path: "/web-page/courses" },
     {
       key: "attempts",
       label: user.role === "instructor" ? "Student Results" : "My Attempts",

@@ -250,6 +250,7 @@ export default function QuizPage() {
                   Time limit: {quiz.timeLimitMinutes ? `${quiz.timeLimitMinutes} minutes` : "None"}
                 </p>
                 <p>Passing score: {quiz.passingScore}%</p>
+                <p>Assigned to: {quiz.courseCode || "All students"}</p>
                 <p>Opens: {dateLabel(quiz.opensAt)}</p>
                 <p>Closes: {dateLabel(quiz.closesAt)}</p>
               </div>

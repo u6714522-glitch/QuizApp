@@ -3,6 +3,7 @@ import { getClientPromise } from "@/app/lib/mongodb";
 import { requireAuth, requireRole } from "@/app/lib/authentication/session";
 import { errorResponse, printExceptionLog, successResponse } from "@/app/lib/utils";
 import { serializeAttempt } from "@/app/lib/api";
+import { isEnrolled } from "@/app/lib/courses";
 import {
   attemptSchema,
   listAttemptsQuerySchema,
@@ -108,6 +109,11 @@ export async function POST(request) {
 
     const quiz = await db.collection("quizzes").findOne({ _id: quizId });
     if (!quiz) return errorResponse("Quiz not found", 404);
+
+    if (quiz.courseCode && !(await isEnrolled(db, session.userId, quiz.courseCode))) {
+      return errorResponse("Quiz not found", 404);
+    }
+
     if (quiz.status !== "published") return errorResponse("This quiz is not published", 409);
     if (quiz.opensAt && now < new Date(quiz.opensAt))
       return errorResponse("This quiz is not open yet", 409);

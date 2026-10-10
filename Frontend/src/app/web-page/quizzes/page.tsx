@@ -92,7 +92,7 @@ export default function QuizzesPage() {
   }
 
   const visible = quizzes.filter((quiz) => {
-    const matchesText = `${quiz.title} ${quiz.subject}`
+    const matchesText = `${quiz.title} ${quiz.subject} ${quiz.courseCode ?? ""}`
       .toLowerCase()
       .includes(search.toLowerCase());
 
@@ -147,7 +147,7 @@ export default function QuizzesPage() {
         <input
           aria-label="Search quizzes"
           className={input}
-          placeholder="Search title or subject"
+          placeholder="Search title, subject or course"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -181,14 +181,16 @@ export default function QuizzesPage() {
             ? "No quizzes match your search."
             : instructor
               ? "Create your first quiz to get started."
-              : "No published quizzes are available yet."}
+              : "No quizzes are assigned to you yet."}
         </Empty>
       ) : (
         <div className="grid gap-4 xl:grid-cols-2">
           {visible.map((quiz) => (
             <article className={card} key={quiz.id}>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-xs font-medium text-orange-600">{quiz.subject}</span>
+                <span className="text-xs font-medium text-orange-600">
+                  {quiz.subject} · {quiz.courseCode || "All students"}
+                </span>
                 <Badge>{availability(quiz)}</Badge>
               </div>
               <h2 className="mt-3 text-xl font-semibold">{quiz.title}</h2>

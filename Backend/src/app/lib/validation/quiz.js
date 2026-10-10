@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { courseCode } from "@/app/lib/validation/course";
 
 export const QUIZ_STATUSES = ["draft", "published", "closed"];
 
@@ -14,6 +15,7 @@ export const quizCreateSchema = z
     title,
     description: description.default(""),
     subject,
+    courseCode: courseCode.nullable().default(null), // null = all students
     timeLimitMinutes: timeLimitMinutes.default(0),
     opensAt: date.optional(),
     closesAt: date.optional(),
@@ -31,6 +33,7 @@ export const quizUpdateSchema = z
     title,
     description,
     subject,
+    courseCode: courseCode.nullable(),
     timeLimitMinutes,
     opensAt: date.nullable(),
     closesAt: date.nullable(),

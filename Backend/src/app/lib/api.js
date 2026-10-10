@@ -21,3 +21,12 @@ export function serializeAttempt(a) {
     ...(quiz && { quiz: { id: quiz._id.toString(), title: quiz.title } }),
   };
 }
+
+export function serializeCourse({ _id, ownerId, studentIds, ...rest }) {
+  return {
+    id: _id.toString(),
+    ownerId: ownerId.toString(),
+    studentCount: studentIds?.length ?? 0,
+    ...rest,
+  };
+}

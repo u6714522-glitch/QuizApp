@@ -2,6 +2,7 @@ import { getClientPromise } from "@/app/lib/mongodb";
 import { requireAuth, requireRole } from "@/app/lib/authentication/session";
 import { parseObjectId } from "@/app/lib/params";
 import { serializeQuiz, serializeQuestion } from "@/app/lib/api";
+import { isEnrolled, ownsCourse } from "@/app/lib/courses";
 import { errorResponse, successResponse, printExceptionLog } from "@/app/lib/utils";
 import { quizUpdateSchema } from "@/app/lib/validation/quiz";
 import corsHeaders from "@/app/lib/cors";
@@ -18,12 +19,17 @@ export async function GET(request, { params }) {
     const db = client.db(process.env.DB_NAME);
 
     const quiz = await db.collection("quizzes").findOne({ _id: quizId });
-    const isOwner = quiz && quiz.ownerId.toString() === session.userId;
+    if (!quiz) return errorResponse("Quiz not found", 404);
 
-    // Non-owners only see published quizzes; say 404 so drafts aren't revealed.
-    if (!quiz || (!isOwner && quiz.status !== "published")) {
-      return errorResponse("Quiz not found", 404);
-    }
+    const isOwner = quiz.ownerId.toString() === session.userId;
+
+    const studentCanView =
+      session.role === "student" &&
+      quiz.status === "published" &&
+      (!quiz.courseCode || (await isEnrolled(db, session.userId, quiz.courseCode)));
+
+    // 404 rather than 403 so drafts and other courses' quizzes aren't revealed.
+    if (!isOwner && !studentCanView) return errorResponse("Quiz not found", 404);
 
     const hideAnswers = !isOwner || request.nextUrl.searchParams.get("for") === "attempt";
 
@@ -73,6 +79,10 @@ export async function PUT(request, { params }) {
 
     if (quiz.ownerId.toString() !== session.userId) {
       return errorResponse("You can only edit your own quizzes", 403);
+    }
+
+    if (data.courseCode && !(await ownsCourse(db, session.userId, data.courseCode))) {
+      return errorResponse("You can only assign quizzes to your own courses", 403);
     }
 
     // Check the date window using the values after this update.

@@ -2,6 +2,7 @@ import { ObjectId } from "mongodb";
 import { getClientPromise } from "@/app/lib/mongodb";
 import { requireAuth, requireRole } from "@/app/lib/authentication/session";
 import { serializeQuiz } from "@/app/lib/api";
+import { enrolledCourseCodes, ownsCourse } from "@/app/lib/courses";
 import { errorResponse, printExceptionLog, successResponse } from "@/app/lib/utils";
 import { quizCreateSchema, QUIZ_STATUSES } from "@/app/lib/validation/quiz";
 
@@ -14,11 +15,20 @@ export async function GET(request) {
     const page = Math.max(1, Number(searchParams.get("page")) || 1);
     const limit = Math.min(50, Math.max(1, Number(searchParams.get("limit")) || 20));
 
-    // Instructors see their own quizzes; students see published ones.
-    const filter =
-      session.role === "instructor"
-        ? { ownerId: new ObjectId(session.userId) }
-        : { status: "published" };
+    const client = await getClientPromise();
+    const db = client.db(process.env.DB_NAME);
+
+    // Instructors see their own quizzes. Students see published quizzes that are
+    // open to everyone (courseCode null/missing) or assigned to a course they're in.
+    let filter;
+
+    if (session.role === "instructor") {
+      filter = { ownerId: new ObjectId(session.userId) };
+    } else {
+      const codes = await enrolledCourseCodes(db, session.userId);
+
+      filter = { status: "published", courseCode: { $in: [null, ...codes] } };
+    }
 
     const subject = searchParams.get("subject");
     if (subject) filter.subject = subject;
@@ -29,9 +39,6 @@ export async function GET(request) {
       if (!QUIZ_STATUSES.includes(status)) return errorResponse("Invalid status filter", 400);
       filter.status = status;
     }
-
-    const client = await getClientPromise();
-    const db = client.db(process.env.DB_NAME);
 
     const quizzes = await db
       .collection("quizzes")
@@ -66,12 +73,20 @@ export async function POST(request) {
     if (!parsed.success) return errorResponse(parsed.error.issues[0].message, 400);
     const data = parsed.data;
 
+    const client = await getClientPromise();
+    const db = client.db(process.env.DB_NAME);
+
+    if (data.courseCode && !(await ownsCourse(db, session.userId, data.courseCode))) {
+      return errorResponse("You can only assign quizzes to your own courses", 403);
+    }
+
     const now = new Date();
 
     const quiz = {
       title: data.title,
       description: data.description,
       subject: data.subject,
+      courseCode: data.courseCode, // null = all students
       ownerId: new ObjectId(session.userId), // from the session, never the body
       timeLimitMinutes: data.timeLimitMinutes,
       opensAt: data.opensAt ?? null,
@@ -81,9 +96,6 @@ export async function POST(request) {
       createdAt: now,
       updatedAt: now,
     };
-
-    const client = await getClientPromise();
-    const db = client.db(process.env.DB_NAME);
 
     await db.collection("quizzes").insertOne(quiz); // adds quiz._id
 
