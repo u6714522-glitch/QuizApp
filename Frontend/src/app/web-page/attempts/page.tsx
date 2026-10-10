@@ -17,8 +17,12 @@ import {
 } from "../_components/workspace";
 
 function AttemptList() {
-  const session = useSession();
   const quizId = useSearchParams().get("quizId");
+  return <AttemptListContent key={quizId ?? "all"} quizId={quizId} />;
+}
+
+function AttemptListContent({ quizId }: { quizId: string | null }) {
+  const session = useSession();
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -30,8 +34,6 @@ function AttemptList() {
   useEffect(() => {
     if (!session.user) return;
     const controller = new AbortController();
-    setLoading(true);
-    setError("");
     api<Attempt[]>(
       "/api/attempt" + (quizId ? "?quizId=" + encodeURIComponent(quizId) : ""),
       { signal: controller.signal },
@@ -96,9 +98,13 @@ function AttemptList() {
           Browse Quizzes
         </Link>
         <button
-          disabled={loading || Boolean(busy)}
-          className={secondary}
-          onClick={() => setRevision((value) => value + 1)}
+        disabled={loading || Boolean(busy)}
+        className={secondary}
+        onClick={() => {
+          setLoading(true);
+          setError("");
+          setRevision((value) => value + 1);
+        }}
         >
           Refresh
         </button>

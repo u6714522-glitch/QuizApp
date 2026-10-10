@@ -43,8 +43,6 @@ export default function QuizzesPage() {
   useEffect(() => {
     if (!session.user) return;
     const controller = new AbortController();
-    setLoading(true);
-    setError("");
     allQuizzes(controller.signal)
       .then((items) => {
         if (!controller.signal.aborted) setQuizzes(items);
@@ -116,9 +114,13 @@ export default function QuizzesPage() {
           </button>
         )}
         <button
-          className={secondary}
-          disabled={loading}
-          onClick={() => setRevision((value) => value + 1)}
+        className={secondary}
+        disabled={loading}
+        onClick={() => {
+          setLoading(true);
+          setError("");
+          setRevision((value) => value + 1);
+        }}
         >
           Refresh
         </button>
